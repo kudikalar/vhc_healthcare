@@ -1,0 +1,24 @@
+{
+  "name": "vision-health-care-backend",
+  "version": "1.0.0",
+  "description": "Vision Health Care - health & life insurance REST API",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/scripts/reset.js",
+    "reset": "node src/scripts/reset.js",
+    "test": "node --test --test-concurrency=1 \"tests/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "pdfkit": "^0.17.1"
+  }
+}
