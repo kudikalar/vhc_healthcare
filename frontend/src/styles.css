@@ -567,3 +567,28 @@ input[type=range] { padding: 0; border: none; accent-color: var(--brand); }
 .split-bar { display: flex; height: 14px; border-radius: 14px; overflow: hidden; }
 .split-bar .h { background: var(--brand); }
 .split-bar .l { background: #5b4bb7; }
+
+/* ---- test-card checkout ---- */
+.checkout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 1.4rem; }
+.co-summary { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem; align-self: start; }
+.co-amount { font-size: 2rem; font-weight: 750; color: var(--navy); font-variant-numeric: tabular-nums; margin-bottom: .8rem; }
+.co-summary .alert { margin: 1rem 0 0; font-size: .85rem; }
+.card-input { position: relative; display: block; }
+.card-input input { padding-right: 6rem; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.card-brand { position: absolute; right: .6rem; top: calc(50% + .15rem); transform: translateY(-50%); font-size: .72rem; font-weight: 800; letter-spacing: .04em; color: var(--navy); background: var(--brand-50); border: 1px solid var(--brand-100); padding: .1rem .45rem; border-radius: 6px; }
+.test-cards { margin-top: 1.1rem; border: 1px dashed var(--border-strong); border-radius: 12px; padding: .7rem .8rem; background: #fffdf6; }
+.test-cards summary { cursor: pointer; font-weight: 700; color: var(--navy); font-size: .9rem; }
+.test-cards p { margin: .3rem 0 .5rem; font-size: .8rem; }
+.test-cards ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; max-height: 210px; overflow-y: auto; }
+.test-cards button { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: .1rem .6rem; text-align: left; font: inherit; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: .4rem .6rem; cursor: pointer; }
+.test-cards button:hover { border-color: var(--brand); background: var(--brand-50); }
+.tc-num { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .86rem; letter-spacing: .03em; }
+.tc-brand { font-size: .75rem; color: var(--muted); text-align: right; }
+.test-cards .badge { grid-column: 1 / -1; justify-self: start; }
+.co-result { text-align: center; padding: 1.5rem 1rem; border-radius: 14px; border: 1px solid var(--border); }
+.co-result.ok { background: var(--ok-50); border-color: #bfe5cf; }
+.co-result.warn { background: var(--warn-50); border-color: #f2dca6; }
+.co-result.error { background: var(--danger-50); border-color: #f6cfcb; }
+.co-check { width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: #fff; display: grid; place-items: center; font-size: 1.6rem; margin: 0 auto .7rem; animation: pop .25s var(--ease); }
+.co-otp h3 { margin-top: .2rem; }
+@media (max-width: 760px) { .checkout { grid-template-columns: 1fr; } }

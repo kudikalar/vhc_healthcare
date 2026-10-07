@@ -76,12 +76,13 @@ export function Payments() {
               { key: 'reference', label: 'Reference', render: (p) => <code>{p.reference}</code> },
               { key: 'description', label: 'For' },
               { key: 'amount', label: 'Amount', num: true, render: (p) => money(p.amount) },
+              { key: 'method', label: 'Paid with', render: (p) => (p.card ? <span>{p.card.brand} •••• {p.card.last4}</span> : <span className="muted">{p.autoPay ? 'Auto-debit' : 'Test gateway'}</span>) },
               { key: 'status', label: 'Status', render: (p) => <><Badge>{p.status}</Badge>{p.autoPay && <small className="muted"> auto-debit</small>}</> },
               { key: 'createdAt', label: 'Date', render: (p) => dateTime(p.completedAt || p.createdAt) },
               { key: 'x', label: '', render: (p) => (
                 <div className="row">
                   {p.status === 'success' && <button className="btn sm secondary" onClick={() => setReceipt(p)}>Receipt</button>}
-                  {p.status === 'pending' && <button className="btn sm" disabled={act.busy} onClick={() => act.run(async () => { await api.post(`/payments/${p.reference}/simulate`, { outcome: 'success' }); res.reload(); })}>Confirm (simulate gateway)</button>}
+                  {p.status === 'pending' && <button className="btn sm" disabled={act.busy} onClick={() => act.run(async () => { await api.post(`/payments/${p.reference}/simulate`, { outcome: 'success' }); res.reload(); })}>Bank confirms (test)</button>}
                 </div>
               ) },
             ]} />
@@ -94,7 +95,7 @@ export function Payments() {
             <dt>Reference</dt><dd><code>{receipt.reference}</code></dd>
             <dt>Amount received</dt><dd>{money(receipt.amount)}</dd>
             <dt>Paid on</dt><dd>{dateTime(receipt.completedAt)}</dd>
-            <dt>Method</dt><dd>{receipt.method}{receipt.autoPay ? ' (auto-debit)' : ''}</dd>
+            <dt>Method</dt><dd>{receipt.card ? `${receipt.card.brand} card •••• ${receipt.card.last4} (test mode)` : receipt.method}{receipt.autoPay ? ' (auto-debit)' : ''}</dd>
           </dl>
         </Card>
       )}
