@@ -30,7 +30,7 @@ export function Home() {
         <Card title="🕊️ Report a life claim"><p>Family members can report a death claim securely, without the policyholder's login.</p><Link to="/life-claim">Start a life claim →</Link></Card>
       </div>
       <h2 style={{ marginTop: '1rem' }}>Our plans</h2>
-      {plans.loading ? <Loading /> : <PlanGrid plans={plans.data} />}
+      {plans.loading ? <Loading /> : plans.error ? <ErrorBox error={plans.error} /> : <PlanGrid plans={plans.data} />}
     </>
   );
 }
@@ -116,7 +116,7 @@ export function Plans() {
     <>
       <PageHeader title="Plan catalogue" subtitle="Select up to three plans to compare side by side." />
       <Tabs value={product} onChange={(v) => { setProduct(v); setSelected([]); }} tabs={[{ value: 'health', label: 'Health insurance' }, { value: 'life', label: 'Life insurance' }]} />
-      {plans.loading ? <Loading /> : <PlanGrid plans={plans.data} selected={selected} onToggle={toggle} />}
+      {plans.loading ? <Loading /> : plans.error ? <ErrorBox error={plans.error} /> : <PlanGrid plans={plans.data} selected={selected} onToggle={toggle} />}
       <ErrorBox error={act.error} />
       {compared.length > 0 && (
         <Card title={`Comparing ${compared.length} plan(s)`}>
