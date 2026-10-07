@@ -3,7 +3,10 @@ import { homeFor, useAuth } from './auth.jsx';
 import Layout from './components/Layout.jsx';
 import { Loading } from './components/ui.jsx';
 import { AcceptInvite, ForgotPassword, Login, Register, ResetPassword, VerifyEmail } from './pages/public/Auth.jsx';
-import { Home, Hospitals, Plans } from './pages/public/Catalogue.jsx';
+import { Hospitals, Plans } from './pages/public/Catalogue.jsx';
+import Landing from './pages/public/Landing.jsx';
+import { AssistantPage, ClaimEstimator, NeedsPlanner } from './pages/customer/Tools.jsx';
+import Insights from './pages/staff/Insights.jsx';
 import QuoteCalculator from './pages/public/QuoteCalculator.jsx';
 import { Applications, Notifications, Payments } from './pages/customer/CustomerPages.jsx';
 import Dashboard from './pages/customer/Dashboard.jsx';
@@ -53,8 +56,9 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={user && user.role !== 'claimant' ? <Navigate to={homeFor(user)} /> : <Home />} />
-        <Route path="/home" element={<Home />} />
+        <Route path="/" element={user && user.role !== 'claimant' ? <Navigate to={homeFor(user)} /> : <Landing />} />
+        <Route path="/home" element={<Landing />} />
+        <Route path="/planner" element={<NeedsPlanner />} />
         <Route path="/login" element={user ? <Navigate to={homeFor(user)} /> : <Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
@@ -76,12 +80,15 @@ export default function App() {
         <Route path="/policies/:id" element={g([...C, ...STAFF_ALL], <PolicyDetail />)} />
         <Route path="/claims" element={g(C, <ClaimsList />)} />
         <Route path="/claims/new" element={g(C, <NewClaim />)} />
+        <Route path="/claims/estimate" element={g(C, <ClaimEstimator />)} />
+        <Route path="/assistant" element={g(C, <AssistantPage />)} />
         <Route path="/claims/:id" element={g(C, <ClaimDetail />)} />
         <Route path="/payments" element={g(C, <Payments />)} />
         <Route path="/family" element={g(C, <Family />)} />
         <Route path="/documents" element={g(C, <Documents />)} />
 
         <Route path="/ops" element={g(STAFF_ALL, <OpsDashboard />)} />
+        <Route path="/ops/insights" element={g(STAFF_ALL, <Insights />)} />
         <Route path="/ops/applications" element={g(UW, <ApplicationQueue />)} />
         <Route path="/ops/applications/:id" element={g(UW, <UnderwritingWorkspace />)} />
         <Route path="/ops/reinstatements" element={g(['underwriter', 'admin'], <Reinstatements />)} />

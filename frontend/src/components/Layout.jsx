@@ -4,28 +4,30 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { ROLE_LABEL, date } from '../format.js';
 import Icon from './Icon.jsx';
+import AssistantLauncher from './AIAssistant.jsx';
 
 // Navigation follows the V2 spec: customer, staff (only authorised workspaces) and mobile tab bar.
 const NAV = {
   customer: [
     [null, [['/dashboard', 'Home', 'home'], ['/plans', 'Explore cover', 'explore'], ['/family', 'My family', 'family'], ['/policies', 'My policies', 'shield'], ['/claims', 'Claims', 'claim'], ['/hospitals', 'Hospitals', 'hospital'], ['/payments', 'Payments', 'card'], ['/documents', 'Documents', 'file'], ['/support', 'Support', 'help']]],
+    ['AI tools', [['/assistant', 'Vision AI', 'help'], ['/claims/estimate', 'Claim estimator', 'calc'], ['/planner', 'Cover planner', 'chart']]],
     ['Buying cover', [['/quote', 'Get a quote', 'calc'], ['/applications', 'Applications', 'clipboard']]],
     ['Account', [['/notifications', 'Notifications', 'bell'], ['/profile', 'Profile & security', 'user']]],
   ],
   agent: [
-    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/applications', 'Applications', 'clipboard']]],
+    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/applications', 'Applications', 'clipboard'], ['/ops/insights', 'Insights', 'chart']]],
     ['Reference', [['/plans', 'Plan catalogue', 'layers'], ['/hospitals', 'Hospitals', 'hospital'], ['/profile', 'My profile', 'user']]],
   ],
   underwriter: [
-    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/applications', 'Underwriting', 'clipboard'], ['/ops/reinstatements', 'Servicing', 'refresh']]],
+    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/applications', 'Underwriting', 'clipboard'], ['/ops/reinstatements', 'Servicing', 'refresh'], ['/ops/insights', 'Insights', 'chart']]],
     ['Reference', [['/plans', 'Plan catalogue', 'layers'], ['/profile', 'My profile', 'user']]],
   ],
   claims_officer: [
-    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/health-claims', 'Health claims', 'claim'], ['/ops/life-claims', 'Life claims', 'dove'], ['/ops/payouts', 'Payments & payouts', 'payout'], ['/ops/exceptions', 'Financial exceptions', 'alert']]],
+    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/health-claims', 'Health claims', 'claim'], ['/ops/life-claims', 'Life claims', 'dove'], ['/ops/payouts', 'Payments & payouts', 'payout'], ['/ops/exceptions', 'Financial exceptions', 'alert'], ['/ops/insights', 'Insights', 'chart']]],
     ['Reference', [['/hospitals', 'Hospitals', 'hospital'], ['/profile', 'My profile', 'user']]],
   ],
   admin: [
-    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/applications', 'Applications & underwriting', 'clipboard'], ['/ops/reinstatements', 'Servicing', 'refresh'], ['/ops/health-claims', 'Health claims', 'claim'], ['/ops/life-claims', 'Life claims', 'dove'], ['/ops/payouts', 'Payments & payouts', 'payout'], ['/ops/exceptions', 'Financial exceptions', 'alert'], ['/admin/reports', 'Reports & audit', 'chart']]],
+    ['Workspace', [['/ops', 'My work', 'work'], ['/ops/insights', 'Insights', 'chart'], ['/ops/applications', 'Applications & underwriting', 'clipboard'], ['/ops/reinstatements', 'Servicing', 'refresh'], ['/ops/health-claims', 'Health claims', 'claim'], ['/ops/life-claims', 'Life claims', 'dove'], ['/ops/payouts', 'Payments & payouts', 'payout'], ['/ops/exceptions', 'Financial exceptions', 'alert'], ['/admin/reports', 'Reports & audit', 'chart']]],
     ['Administration', [['/admin/plans', 'Plans & rates', 'layers'], ['/admin/hospitals', 'Hospitals', 'hospital'], ['/admin/users', 'Users & roles', 'family'], ['/admin/notifications', 'Notifications', 'bell'], ['/admin/dev', 'Dev tools', 'settings']]],
   ],
 };
@@ -67,6 +69,7 @@ function useOnline() {
 
 const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
 const exact = (to) => ['/ops', '/dashboard', '/claims'].includes(to);
+const LANDING = ['/', '/home'];
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -112,6 +115,7 @@ export default function Layout() {
             <NavLink to="/plans">Plans</NavLink>
             <NavLink to="/quote">Get a quote</NavLink>
             <NavLink to="/hospitals">Hospitals</NavLink>
+            <NavLink to="/planner">Cover planner</NavLink>
             <NavLink to="/life-claim">Report a life claim</NavLink>
           </nav>
         )}
@@ -166,7 +170,7 @@ export default function Layout() {
           <main className="main" id="main" tabIndex={-1}><Outlet /></main>
         </div>
       ) : (
-        <main className="main main-public" id="main" tabIndex={-1}><Outlet /></main>
+        <main className={`main main-public ${LANDING.includes(loc.pathname) ? 'main-landing' : ''}`} id="main" tabIndex={-1}><Outlet /></main>
       )}
 
       {withShell && isCustomer && (
@@ -177,6 +181,7 @@ export default function Layout() {
           <button type="button" onClick={() => setDrawer(true)} aria-expanded={drawer}><Icon name="menu" size={22} /><span>More</span></button>
         </nav>
       )}
+      <AssistantLauncher />
       {!bare && (
         <footer className={`footer ${withShell ? 'with-shell' : ''}`}>
           <img src="/logo-mark.png" alt="" width="20" height="20" />

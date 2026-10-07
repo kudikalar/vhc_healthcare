@@ -20,6 +20,7 @@ import adminRoutes from './routes/admin.js';
 import reportRoutes from './routes/reports.js';
 import devRoutes from './routes/dev.js';
 import dashboardRoutes from './routes/dashboard.js';
+import aiRoutes from './routes/ai.js';
 
 export function createApp() {
   load();
@@ -49,6 +50,7 @@ export function createApp() {
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/reports', reportRoutes);
+  app.use('/api/ai', aiRoutes);
   if (process.env.NODE_ENV !== 'production') app.use('/api/dev', devRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'Route not found' }));

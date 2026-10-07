@@ -11,13 +11,13 @@ const tomorrow = () => { const d = new Date(); d.setDate(d.getDate() + 1); retur
 export default function QuoteCalculator() {
   const [params] = useSearchParams();
   const plans = useLoad(() => api.get('/plans'));
-  const [product, setProduct] = useState('health');
+  const [product, setProduct] = useState(params.get('product') === 'life' ? 'life' : 'health');
   const [planId, setPlanId] = useState(params.get('plan') || '');
   const { user } = useAuth();
   const nav = useNavigate();
 
   const [h, setH] = useState({ coverage: '', optionalBenefits: [], startDate: tomorrow(), members: [{ fullName: '', dob: '', relationship: 'self' }] });
-  const [l, setL] = useState({ dob: '', startDate: tomorrow(), sumAssured: '5000000', policyTerm: 20, premiumPaymentTerm: 20, frequency: 'annual', tobacco: false, riders: [], annualIncome: '1200000' });
+  const [l, setL] = useState({ dob: '', startDate: tomorrow(), sumAssured: params.get('sumAssured') || '5000000', policyTerm: 20, premiumPaymentTerm: 20, frequency: 'annual', tobacco: false, riders: [], annualIncome: '1200000' });
   const [quote, setQuote] = useState(null);
   const act = useAction();
   const applyAct = useAction();

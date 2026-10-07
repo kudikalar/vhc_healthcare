@@ -10,32 +10,7 @@ export function startingPrice(p) {
   return null;
 }
 
-export function Home() {
-  const plans = useLoad(() => api.get('/plans'));
-  const { user } = useAuth();
-  return (
-    <>
-      <section className="hero">
-        <h1>Health and life cover, clearly explained.</h1>
-        <p>Compare plans, get an instant quote with a full price breakdown, apply online, and manage policies and claims in one place.</p>
-        <div className="row">
-          <Link className="btn secondary" to="/quote">Get a quote</Link>
-          <Link className="btn secondary" to="/plans">Compare plans</Link>
-          {!user && <Link className="btn secondary" to="/register">Create an account</Link>}
-        </div>
-      </section>
-      <div className="grid grid-3">
-        <Card title="🏥 Network hospitals"><p>Search hospitals by city, postal code and specialty for cashless treatment.</p><Link to="/hospitals">Find a hospital →</Link></Card>
-        <Card title="📄 Claims made simple"><p>Cashless pre-authorisation or reimbursement — track every step and amount.</p><Link to={user ? '/claims' : '/login'}>Go to claims →</Link></Card>
-        <Card title="🕊️ Report a life claim"><p>Family members can report a death claim securely, without the policyholder's login.</p><Link to="/life-claim">Start a life claim →</Link></Card>
-      </div>
-      <h2 style={{ marginTop: '1rem' }}>Our plans</h2>
-      {plans.loading ? <Loading /> : plans.error ? <ErrorBox error={plans.error} /> : <PlanGrid plans={plans.data} />}
-    </>
-  );
-}
-
-function PlanGrid({ plans, selected, onToggle }) {
+export function PlanGrid({ plans, selected, onToggle }) {
   return (
     <div className="grid grid-3">
       {plans.map((p) => (
