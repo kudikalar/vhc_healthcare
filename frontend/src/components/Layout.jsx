@@ -65,7 +65,7 @@ export default function Layout() {
   return (
     <>
       <header className="topbar">
-        <Link to="/" className="brand"><span className="brand-mark">+</span> Vision Health Care</Link>
+        <Link to="/" className="brand"><img src="/logo-mark.png" alt="" className="brand-logo" /> Vision Health Care</Link>
         <nav className="topnav" aria-label="Public">
           <NavLink to="/plans">Plans</NavLink>
           <NavLink to="/quote">Get a quote</NavLink>

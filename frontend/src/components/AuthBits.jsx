@@ -79,7 +79,7 @@ export function OtpCard({ destination, expiresAt, onVerify, onResend, busy, erro
 export function AuthBrandPanel({ title = 'Cover that is clear from the first click.', subtitle = 'Health and life insurance with transparent pricing, simple claims and no surprises.' }) {
   return (
     <aside className="auth-brand" aria-hidden="false">
-      <div className="brand-mark" style={{ width: 44, height: 44, fontSize: '1.4rem', marginBottom: '1.5rem' }}>+</div>
+      <img src="/logo.png" alt="Vision Health Care" className="auth-logo" />
       <h2>{title}</h2>
       <p>{subtitle}</p>
       <ul className="auth-points">
