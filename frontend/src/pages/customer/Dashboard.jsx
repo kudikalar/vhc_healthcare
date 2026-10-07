@@ -4,6 +4,8 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { date, dateTime, money } from '../../format.js';
 import { Alert, Badge, Card, Empty } from '../../components/ui.jsx';
+import Icon from '../../components/Icon.jsx';
+import { SharedCover } from './Family.jsx';
 
 const ICON = { application: '✎', claim: '✚', payment: '₹', policy: '🛡' };
 
@@ -12,6 +14,7 @@ export default function Dashboard() {
   const [filters, setFilters] = useState({ product: 'all', from: '', to: '' });
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const [dateError, setDateError] = useState(null);
+  const [balances, setBalances] = useState({});
 
   const load = async (f = filters) => {
     if (f.from && f.to && f.to < f.from) { setDateError('End date must be on or after start.'); return; }
@@ -19,7 +22,8 @@ export default function Dashboard() {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const q = new URLSearchParams({ product: f.product, ...(f.from ? { from: f.from } : {}), ...(f.to ? { to: f.to } : {}) });
-      const data = await api.get(`/dashboard?${q}`);
+      const [data, pols] = await Promise.all([api.get(`/dashboard?${q}`), api.get('/policies').catch(() => null)]);
+      if (pols) setBalances(Object.fromEntries(pols.filter((p) => p.balance).map((p) => [p.id, p])));
       setState({ loading: false, data, error: null });
       if (!f.from) setFilters((x) => ({ ...x, from: data.filters.from, to: data.filters.to }));
     } catch (error) {
@@ -63,6 +67,7 @@ export default function Dashboard() {
           {d.partialErrors.length > 0 && (
             <Alert kind="warn">Some sections couldn't be loaded ({d.partialErrors.join(', ')}). <button className="btn ghost sm" onClick={() => load()}>Retry</button></Alert>
           )}
+          <NextAction actions={d.actions} />
           {d.kpis && (
             <div className="kpis" style={{ opacity: state.loading ? 0.6 : 1 }}>
               <Kpi label="Active policies" k={d.kpis.activePolicies} />
@@ -73,16 +78,27 @@ export default function Dashboard() {
           )}
           <div className="dash-grid">
             <div>
-              <Card title="Your policies" actions={<Link to="/policies">View all</Link>}>
-                {d.policies.length === 0 ? (
+              {d.policies.length === 0 ? (
+                <Card title="Your cover">
                   <Empty>
                     <p style={{ marginTop: 0 }}>You don't have any {filters.product === 'all' ? '' : `${filters.product} `}policies yet.</p>
                     <Link className="btn" to="/quote">Get a quote</Link>
                   </Empty>
-                ) : (
-                  <div className="policy-cards">{d.policies.map((p) => <PolicyCard key={p.id} p={p} />)}</div>
-                )}
-              </Card>
+                </Card>
+              ) : (
+                <>
+                  <Glance policies={d.policies} balances={balances} />
+                  {['health', 'life'].map((prod) => {
+                    const list = d.policies.filter((p) => p.product === prod);
+                    if (!list.length) return null;
+                    return (
+                      <Card key={prod} title={<span className="row"><Icon name={prod === 'health' ? 'claim' : 'shield'} /> {prod === 'health' ? 'Health cover' : 'Life cover'}</span>} actions={<Link to="/policies">View all</Link>}>
+                        <div className="policy-cards">{list.map((p) => <PolicyCard key={p.id} p={p} />)}</div>
+                      </Card>
+                    );
+                  })}
+                </>
+              )}
               <Card title="Recent activity" actions={<small className="muted">{date(d.filters.from)} – {date(d.filters.to)}</small>}>
                 {d.activity.length === 0 ? <Empty>No activity in this period.</Empty> : (
                   <ul className="activity-list">
@@ -100,6 +116,7 @@ export default function Dashboard() {
                 )}
               </Card>
             </div>
+            <div>
             <Card title="Things to do">
               {d.actions.length === 0 ? <Empty>You're all caught up.</Empty> : (
                 <ul className="action-list">
@@ -118,6 +135,11 @@ export default function Dashboard() {
                 </ul>
               )}
             </Card>
+              <PremiumCalendar policies={d.policies} />
+              <Card title={<span className="row"><Icon name="family" /> Family</span>} actions={<Link to="/family">Open</Link>}>
+                <p style={{ margin: 0 }} className="muted">See everyone insured or nominated on your policies, and how shared cover is being used.</p>
+              </Card>
+            </div>
           </div>
         </>
       )}
@@ -165,3 +187,70 @@ function DashboardSkeleton() {
   );
 }
 
+
+function NextAction({ actions }) {
+  const next = [...actions].sort((a, b) => a.priority - b.priority)[0];
+  if (!next) return null;
+  return (
+    <Link className="next-action" to={next.link}>
+      <span className="ic"><Icon name={next.kind === 'payment' ? 'card' : next.kind === 'claim' ? 'claim' : 'clipboard'} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span className="eyebrow">Your next step</span>
+        <strong>{next.title}{next.amount != null && <> · {money(next.amount)}</>}</strong>
+        <span className="d">{next.detail}</span>
+      </span>
+      <span className="btn sm">Continue</span>
+    </Link>
+  );
+}
+
+/** "Coverage at a glance": health shows available / reserved / settled per policy (a floater once);
+ *  life shows insured benefit, status and cover end separately. */
+function Glance({ policies, balances }) {
+  const health = policies.filter((p) => p.product === 'health');
+  const life = policies.filter((p) => p.product === 'life');
+  return (
+    <>
+      <div className="section-title" style={{ marginTop: 0 }}><Icon name="shield" /><h2>Coverage at a glance</h2></div>
+      <div className="glance" style={{ marginBottom: '1rem' }}>
+        {health.map((p) => (balances[p.id] ? <SharedCover key={p.id} pol={balances[p.id]} /> : (
+          <Card key={p.id} title={p.planName}><span className="big-num">{money(p.availableCoverage)}</span> <small>available of {money(p.coverage)}</small></Card>
+        )))}
+        {life.map((p) => (
+          <Card key={p.id} title={<span>{p.planName} <small className="muted">· {p.policyNumber}</small></span>} actions={<Link to={`/policies/${p.id}`}>Details</Link>}>
+            <div className="row between"><div><span className="big-num">{money(p.sumAssured)}</span> <small>life cover</small></div><Badge>{p.status}</Badge></div>
+            <div className="glance-row">
+              <div><div className="l">Status</div><div className="v">{p.status}</div></div>
+              <div><div className="l">Cover ends</div><div className="v">{date(p.endDate)}</div></div>
+              <div><div className="l">Next premium</div><div className="v">{p.nextDue ? money(p.nextDue.amount) : '—'}</div></div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PremiumCalendar({ policies }) {
+  const due = policies.filter((p) => p.nextDue).sort((a, b) => a.nextDue.dueDate.localeCompare(b.nextDue.dueDate));
+  return (
+    <Card title={<span className="row"><Icon name="card" /> Premium calendar</span>} actions={<Link to="/payments">Payments</Link>}>
+      {due.length === 0 ? <p className="muted" style={{ margin: 0 }}>No upcoming premiums.</p> : (
+        <ul className="cal-list">
+          {due.map((p) => {
+            const d = new Date(`${p.nextDue.dueDate}T00:00:00Z`);
+            return (
+              <li key={p.id}>
+                <span className="cal-date"><b>{d.getUTCDate()}</b>{d.toLocaleString('en-IN', { month: 'short', timeZone: 'UTC' })}</span>
+                <span style={{ flex: 1 }}>
+                  <Link to={`/policies/${p.id}?tab=schedule`}><strong>{money(p.nextDue.amount)}</strong></Link>
+                  <div className="muted" style={{ fontSize: '.85rem' }}>{p.planName} · grace until {date(p.nextDue.graceEnds)}</div>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}

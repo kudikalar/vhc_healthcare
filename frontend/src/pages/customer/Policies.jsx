@@ -16,7 +16,7 @@ export function Policies() {
   const nav = useNavigate();
   return (
     <>
-      <PageHeader title="Policies & documents" subtitle="Previous policies are kept with their claim history after renewal." />
+      <PageHeader title="My policies" subtitle="Previous policies are kept with their claim history after renewal." />
       <BucketFilterNote bucket={bucket} path="/policies" />
       <Card>
         {res.loading ? <Loading /> : (

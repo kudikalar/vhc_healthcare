@@ -39,7 +39,7 @@ export function NewClaim() {
     return { policies: policies.filter((p) => p.product === 'health'), hospitals: hospitals.hospitals };
   });
   const [key] = useState(idempotencyKey); // stable across retries: no duplicate claims on network failure
-  const [f, setF] = useState({ policyId: params.get('policy') || '', memberId: '', type: 'reimbursement', hospitalId: '', hospitalName: '', admissionDate: '', dischargeDate: '', diagnosis: '', treatment: '', requestedAmount: '', isAccident: false, payoutDetails: { accountName: '', accountNumber: '', ifsc: '' } });
+  const [f, setF] = useState({ policyId: params.get('policy') || '', memberId: '', type: params.get('type') === 'cashless' ? 'cashless' : 'reimbursement', hospitalId: '', hospitalName: '', admissionDate: '', dischargeDate: '', diagnosis: '', treatment: '', requestedAmount: '', isAccident: false, payoutDetails: { accountName: '', accountNumber: '', ifsc: '' } });
   const act = useAction();
   const policy = useMemo(() => data.data?.policies.find((p) => p.id === f.policyId), [data.data, f.policyId]);
   const hospital = data.data?.hospitals.find((h) => h.id === f.hospitalId);

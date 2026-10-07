@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { homeFor, useAuth } from './auth.jsx';
 import Layout from './components/Layout.jsx';
 import { Loading } from './components/ui.jsx';
@@ -8,6 +8,9 @@ import QuoteCalculator from './pages/public/QuoteCalculator.jsx';
 import { Applications, Notifications, Payments } from './pages/customer/CustomerPages.jsx';
 import Dashboard from './pages/customer/Dashboard.jsx';
 import Profile from './pages/customer/Profile.jsx';
+import Family from './pages/customer/Family.jsx';
+import Documents from './pages/customer/Documents.jsx';
+import Support from './pages/customer/Support.jsx';
 import ApplicationDetail from './pages/customer/ApplicationDetail.jsx';
 import { Policies, PolicyDetail } from './pages/customer/Policies.jsx';
 import { ClaimDetail, ClaimsList, NewClaim } from './pages/customer/Claims.jsx';
@@ -25,6 +28,16 @@ function Guard({ roles, children }) {
   if (!user) return <Navigate to="/login" state={{ from: loc.pathname }} replace />;
   if (roles && !roles.includes(user.role)) return <Navigate to={homeFor(user)} replace />;
   return children;
+}
+
+function NotFound() {
+  return (
+    <div className="center-card"><div className="card">
+      <h1>Page not found</h1>
+      <p className="muted">The page you were looking for doesn't exist or has moved.</p>
+      <Link className="btn" to="/">Go to home</Link>
+    </div></div>
+  );
 }
 
 const C = ['customer'];
@@ -52,6 +65,7 @@ export default function App() {
         <Route path="/quote" element={<QuoteCalculator />} />
         <Route path="/hospitals" element={<Hospitals />} />
         <Route path="/life-claim" element={<LifeClaimPortal />} />
+        <Route path="/support" element={<Support />} />
 
         <Route path="/dashboard" element={g(C, <Dashboard />)} />
         <Route path="/profile" element={g([...C, ...STAFF_ALL], <Profile />)} />
@@ -64,6 +78,8 @@ export default function App() {
         <Route path="/claims/new" element={g(C, <NewClaim />)} />
         <Route path="/claims/:id" element={g(C, <ClaimDetail />)} />
         <Route path="/payments" element={g(C, <Payments />)} />
+        <Route path="/family" element={g(C, <Family />)} />
+        <Route path="/documents" element={g(C, <Documents />)} />
 
         <Route path="/ops" element={g(STAFF_ALL, <OpsDashboard />)} />
         <Route path="/ops/applications" element={g(UW, <ApplicationQueue />)} />
@@ -82,7 +98,7 @@ export default function App() {
         <Route path="/admin/notifications" element={g(ADMIN, <NotificationAdmin />)} />
         <Route path="/admin/reports" element={g(ADMIN, <ReportsAudit />)} />
         <Route path="/admin/dev" element={g(ADMIN, <DevTools />)} />
-        <Route path="*" element={<div className="empty">Page not found.</div>} />
+        <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
   );
