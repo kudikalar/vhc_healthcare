@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "api-v3",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--env-file=C:/Users/RAMESH~1/AppData/Local/Temp/claude/C--october5th-vhc-healthcare/1755b89b-5a5e-4f45-b137-c9cfa8fe9171/scratchpad/be.env", "backend/src/server.js"],
+      "port": 4100
+    },
+    {
+      "name": "web-v3",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--env-file=C:/Users/RAMESH~1/AppData/Local/Temp/claude/C--october5th-vhc-healthcare/1755b89b-5a5e-4f45-b137-c9cfa8fe9171/scratchpad/fe.env", "frontend/node_modules/vite/bin/vite.js", "frontend", "--port", "5180", "--strictPort"],
+      "port": 5180
+    }
+  ]
+}
