@@ -592,3 +592,37 @@ input[type=range] { padding: 0; border: none; accent-color: var(--brand); }
 .co-check { width: 56px; height: 56px; border-radius: 50%; background: var(--ok); color: #fff; display: grid; place-items: center; font-size: 1.6rem; margin: 0 auto .7rem; animation: pop .25s var(--ease); }
 .co-otp h3 { margin-top: .2rem; }
 @media (max-width: 760px) { .checkout { grid-template-columns: 1fr; } }
+
+/* ---- compact registration: whole form fits one screen ---- */
+.auth-split.compact { height: calc(100vh - var(--header-h) - var(--sim-h)); min-height: 0; }
+.auth-split.compact .auth-pane { padding: 1rem 1.5rem; overflow-y: auto; align-items: center; }
+.auth-split.compact .auth-brand { padding: 2rem 2.75rem; }
+.auth-split.compact .auth-brand h2 { font-size: 1.6rem; }
+.auth-split.compact .auth-logo { width: 150px; padding: 10px 14px; margin-bottom: 1.1rem; }
+.auth-split.compact .auth-points { margin-top: 1rem; gap: .6rem; }
+.auth-card.wide { max-width: 580px; }
+.auth-split.compact .card { padding: 1.25rem 1.5rem; margin: 0; }
+.auth-split.compact .auth-title { font-size: 1.45rem; }
+.auth-split.compact .auth-sub { margin-bottom: .75rem; }
+.auth-split.compact .stack > * + * { margin-top: .6rem; }
+.auth-split.compact .alert { margin-bottom: .6rem; padding: .5rem .75rem; }
+.auth-split.compact input:not([type=checkbox]) { padding-top: .5rem; padding-bottom: .5rem; }
+.auth-split.compact .check { font-size: .875rem; }
+.auth-split.compact .btn.block { padding: .6rem 1rem; }
+.hint-line { display: block; font-size: .8rem; color: var(--muted); margin-top: .3rem; }
+@media (max-width: 900px) { .auth-split.compact { height: auto; } }
+@media (max-height: 740px) { .auth-split.compact .auth-sub { display: none; } }
+.auth-split.compact .auth-pane { padding: .5rem 1.5rem; }
+.auth-split.compact .card { padding: 1.05rem 1.4rem; }
+.auth-split.compact .auth-title { font-size: 1.3rem; margin-bottom: .1rem; }
+.auth-split.compact .auth-sub { font-size: .875rem; margin-bottom: .6rem; }
+.auth-split.compact .stack > * + * { margin-top: .5rem; }
+.auth-split.compact label.field { font-size: .85rem; }
+.auth-split.compact input:not([type=checkbox]) { margin-top: .2rem; padding-top: .45rem; padding-bottom: .45rem; }
+.auth-split.compact .input-affix { margin-top: .2rem; }
+.auth-split.compact .input-affix input { margin-top: 0; }
+.auth-split.compact label.field .err, .auth-split.compact .field-error { margin-top: .1rem; font-size: .76rem; line-height: 1.3; }
+.auth-split.compact .hint-line { margin-top: .2rem; font-size: .76rem; }
+.auth-split.compact .check { line-height: 1.35; }
+
+input::placeholder, textarea::placeholder { color: #8796a8; opacity: 1; }

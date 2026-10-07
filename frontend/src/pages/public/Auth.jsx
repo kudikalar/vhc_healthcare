@@ -70,9 +70,9 @@ export function Login() {
             {unverified && <Alert kind="warn">Verify your email address before signing in. <Link to={`/verify-email?email=${encodeURIComponent(form.email)}`}>Resend the link</Link></Alert>}
             <form onSubmit={submit} className="stack" noValidate>
               <Field label="Email address" error={errs.email}>
-                <input type="email" autoComplete="username" maxLength={254} value={form.email} aria-invalid={!!errs.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                <input type="email" autoComplete="username" maxLength={254} placeholder="you@example.com" value={form.email} aria-invalid={!!errs.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </Field>
-              <PasswordField label="Password" value={form.password} error={errs.password} onChange={(password) => setForm({ ...form, password })} />
+              <PasswordField label="Password" placeholder="Enter your password" value={form.password} error={errs.password} onChange={(password) => setForm({ ...form, password })} />
               <div className="row between">
                 <label className="check"><input type="checkbox" checked={form.remember} onChange={(e) => setForm({ ...form, remember: e.target.checked })} /> Remember this device for 7 days</label>
                 <Link to="/forgot-password" style={{ fontSize: '.88rem' }}>Forgot password?</Link>
@@ -147,10 +147,10 @@ export function Register() {
   }
 
   return (
-    <div className="auth-split">
+    <div className="auth-split compact">
       <AuthBrandPanel />
       <div className="auth-pane">
-        <div className="auth-card">
+        <div className="auth-card wide">
           <Card>
             <h1 className="auth-title">Create your account</h1>
             <p className="auth-sub">It takes a minute. You'll verify your email before you can sign in.</p>
@@ -158,24 +158,28 @@ export function Register() {
             {Object.keys(errs).length > 0 && <Alert kind="error">Please correct the highlighted fields.</Alert>}
             <form onSubmit={submit} className="stack" noValidate>
               <div className="form-row-2">
-                <Field label="First name" error={errs.firstName}><input autoComplete="given-name" maxLength={60} value={f.firstName} onChange={set('firstName')} aria-invalid={!!errs.firstName} /></Field>
-                <Field label="Last name" hint="Optional" error={errs.lastName}><input autoComplete="family-name" maxLength={60} value={f.lastName} onChange={set('lastName')} aria-invalid={!!errs.lastName} /></Field>
+                <Field label="First name" error={errs.firstName}><input autoComplete="given-name" maxLength={60} placeholder="e.g. Asha" value={f.firstName} onChange={set('firstName')} aria-invalid={!!errs.firstName} /></Field>
+                <Field label="Last name (optional)" error={errs.lastName}><input autoComplete="family-name" maxLength={60} placeholder="e.g. Verma" value={f.lastName} onChange={set('lastName')} aria-invalid={!!errs.lastName} /></Field>
               </div>
-              <Field label="Email address" error={errs.email}><input type="email" autoComplete="email" maxLength={254} value={f.email} onChange={set('email')} aria-invalid={!!errs.email} /></Field>
-              <Field label="Mobile number" hint="India only, 10 digits" error={errs.mobile}>
-                <div className="row" style={{ flexWrap: 'nowrap', gap: '.4rem' }}>
-                  <span className="badge" style={{ marginTop: '.3rem', padding: '.5rem .6rem' }}>+91</span>
-                  <input type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" value={f.mobile} onChange={set('mobile')} aria-invalid={!!errs.mobile} />
+              <div className="form-row-2">
+                <Field label="Email address" error={errs.email}><input type="email" autoComplete="email" maxLength={254} placeholder="you@example.com" value={f.email} onChange={set('email')} aria-invalid={!!errs.email} /></Field>
+                <Field label="Mobile number" error={errs.mobile}>
+                  <span className="input-affix"><span>+91</span><input type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="98765 43210" value={f.mobile} onChange={set('mobile')} aria-invalid={!!errs.mobile} /></span>
+                </Field>
+              </div>
+              <div>
+                <div className="form-row-2">
+                  <PasswordField label="Password" placeholder="12+ characters" autoComplete="new-password" value={f.password} error={errs.password} onChange={(password) => setF({ ...f, password })} />
+                  <PasswordField label="Confirm password" placeholder="Re-enter password" autoComplete="new-password" value={f.confirmPassword} error={errs.confirmPassword} onChange={(confirmPassword) => setF({ ...f, confirmPassword })} />
                 </div>
-              </Field>
-              <PasswordField label="Password" hint={`12–128 characters. Spaces are fine — a passphrase works well. (${pwLen(f.password)}/128)`} autoComplete="new-password" value={f.password} error={errs.password} onChange={(password) => setF({ ...f, password })} />
-              <PasswordField label="Confirm password" autoComplete="new-password" value={f.confirmPassword} error={errs.confirmPassword} onChange={(confirmPassword) => setF({ ...f, confirmPassword })} />
+                <span className="hint-line">12–128 characters; spaces are fine — a passphrase works well. <span className="muted">({pwLen(f.password)}/128)</span></span>
+              </div>
               <div>
                 <label className="check"><input type="checkbox" checked={f.acceptTerms} onChange={set('acceptTerms')} aria-invalid={!!errs.acceptTerms} />
                   <span>I accept the <a href="#terms" onClick={(e) => e.preventDefault()}>terms of use</a> and acknowledge the <a href="#privacy" onClick={(e) => e.preventDefault()}>privacy notice</a>.</span></label>
                 {errs.acceptTerms && <span className="field-error">{errs.acceptTerms}</span>}
               </div>
-              <label className="check"><input type="checkbox" checked={f.marketingOptIn} onChange={set('marketingOptIn')} /> <span>Send me product news and offers (optional — you can stop anytime).</span></label>
+              <label className="check"><input type="checkbox" checked={f.marketingOptIn} onChange={set('marketingOptIn')} /> <span>Send me product news and offers (optional).</span></label>
               <button className="btn block" disabled={act.busy}>{act.busy ? 'Creating account…' : 'Create account'}</button>
               <p className="muted" style={{ textAlign: 'center', margin: 0 }}>Already have an account? <Link to="/login">Sign in</Link></p>
             </form>
@@ -218,7 +222,7 @@ export function VerifyEmail() {
         {(!token || verify.error) && (
           <form className="stack" style={{ textAlign: 'left' }} onSubmit={(e) => { e.preventDefault(); doResend(); }}>
             <p className="muted" style={{ textAlign: 'center', margin: 0 }}>Enter your email and we'll send a new link. Links expire after 24 hours, and a new link replaces older ones.</p>
-            <Field label="Email address"><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+            <Field label="Email address"><input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
             <button className="btn block" disabled={resend.busy || left > 0 || !emailOk(email)}>{left > 0 ? `Resend available in ${left}s` : 'Send a new link'}</button>
             {resend.message && <Alert kind="ok">{resend.message}</Alert>}
             {resend.error && <Alert kind="error">{resend.error.message}</Alert>}
@@ -248,7 +252,7 @@ export function ForgotPassword() {
           act.run(async () => setRes(await api.post('/auth/forgot-password', { email })));
         }}>
           <p className="muted" style={{ margin: 0, textAlign: 'center' }}>We'll email a reset link that works once and expires in 30 minutes.</p>
-          <Field label="Email address" error={err}><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={!!err} /></Field>
+          <Field label="Email address" error={err}><input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={!!err} /></Field>
           <button className="btn block" disabled={act.busy}>Send reset link</button>
           {res && <Alert kind="ok">{res.message}</Alert>}
           {res?.devResetToken && <DevHint><Link to={`/reset-password?token=${res.devResetToken}`}>Open the reset link</Link></DevHint>}
@@ -291,8 +295,8 @@ function SetPasswordForm({ checkPath, submitPath, title, intro, successText }) {
         ) : (
           <form className="stack" style={{ textAlign: 'left' }} onSubmit={submit} noValidate>
             {intro && <p className="muted" style={{ margin: 0, textAlign: 'center' }}>{intro(check.data)}</p>}
-            <PasswordField label="New password" hint="12–128 characters; spaces allowed" autoComplete="new-password" value={f.password} error={errs.password} onChange={(password) => setF({ ...f, password })} />
-            <PasswordField label="Confirm new password" autoComplete="new-password" value={f.confirmPassword} error={errs.confirmPassword} onChange={(confirmPassword) => setF({ ...f, confirmPassword })} />
+            <PasswordField label="New password" placeholder="12+ characters" hint="12–128 characters; spaces allowed" autoComplete="new-password" value={f.password} error={errs.password} onChange={(password) => setF({ ...f, password })} />
+            <PasswordField label="Confirm new password" placeholder="Re-enter new password" autoComplete="new-password" value={f.confirmPassword} error={errs.confirmPassword} onChange={(confirmPassword) => setF({ ...f, confirmPassword })} />
             {act.error && !Object.keys(errs).length && <Alert kind="error">{act.error.message}</Alert>}
             <button className="btn block" disabled={act.busy}>Save password</button>
           </form>

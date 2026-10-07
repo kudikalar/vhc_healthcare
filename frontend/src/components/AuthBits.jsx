@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Alert, DevHint } from './ui.jsx';
 
 /** Password input with a show/hide toggle. Never trims the value. */
-export function PasswordField({ label, value, onChange, error, autoComplete = 'current-password', hint, name }) {
+export function PasswordField({ label, value, onChange, error, autoComplete = 'current-password', hint, name, placeholder }) {
   const [show, setShow] = useState(false);
   const id = useId();
   return (
@@ -10,7 +10,7 @@ export function PasswordField({ label, value, onChange, error, autoComplete = 'c
       {label}
       {hint && <span className="hint">{hint}</span>}
       <div className="pw-wrap">
-        <input id={id} name={name} type={show ? 'text' : 'password'} autoComplete={autoComplete} value={value}
+        <input id={id} name={name} type={show ? 'text' : 'password'} autoComplete={autoComplete} placeholder={placeholder} value={value}
           onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined} />
         <button type="button" className="pw-toggle" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}>
           {show ? 'Hide' : 'Show'}
