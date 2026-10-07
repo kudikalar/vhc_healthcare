@@ -232,6 +232,11 @@ export function resetAndSeed() {
   app.status = APP_STATUS.UNDERWRITING;
   app.timeline.push({ at: now().toISOString(), from: 'Draft', status: 'Underwriting', by: 'Seed', role: 'system', note: 'Submitted and forwarded to underwriting' });
 
+  // Asha's family roster: two members already covered, plus her mother who has no cover yet.
+  for (const [fullName, dob, relationship, gender] of [['Vikram Verma', '1985-09-03', 'spouse', 'male'], ['Diya Verma', '2016-01-20', 'child', 'female'], ['Kamala Iyer', '1962-03-14', 'parent', 'female']]) {
+    db.insert('familyMembers', { userId: 'usr_cust1', fullName, dob, relationship, gender, status: 'active', version: 1 });
+  }
+
   // A reimbursement claim on the floater policy for the claims workspace.
   db.insert('healthClaims', {
     claimNumber: 'HC-SEED-000001', userId: 'usr_cust1', policyId: floater.id, policyNumber: floater.policyNumber,

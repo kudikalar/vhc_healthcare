@@ -626,3 +626,43 @@ input[type=range] { padding: 0; border: none; accent-color: var(--brand); }
 .auth-split.compact .check { line-height: 1.35; }
 
 input::placeholder, textarea::placeholder { color: #8796a8; opacity: 1; }
+
+/* ---- family roster ---- */
+.family-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; margin-bottom: 1rem; }
+.family-stats div { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: .8rem 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.family-stats b { font-size: 1.5rem; color: var(--navy); font-variant-numeric: tabular-nums; }
+.family-stats span { font-size: .85rem; color: var(--muted); }
+.family-stats .warn b { color: var(--warn); }
+@media (max-width: 640px) { .family-stats { grid-template-columns: 1fr 1fr; } }
+.person .uncovered { font-size: .88rem; color: var(--warn); background: var(--warn-50); border: 1px dashed #f2dca6; border-radius: 8px; padding: .4rem .6rem; }
+.person > .btn { align-self: flex-start; margin-top: auto; }
+.add-person { align-items: center; justify-content: center; border: 2px dashed var(--border-strong); background: var(--surface-2); color: var(--brand-600); font: inherit; font-weight: 600; cursor: pointer; min-height: 160px; box-shadow: none; }
+.add-person:hover { border-color: var(--brand); background: var(--brand-50); }
+.add-person .plus { width: 44px; height: 44px; border-radius: 50%; background: #fff; border: 1px solid var(--brand-100); display: grid; place-items: center; font-size: 1.4rem; }
+.family-pick { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0 .2rem; }
+.family-pick button { font: inherit; font-size: .85rem; padding: .35rem .7rem; border-radius: 999px; border: 1px solid var(--border-strong); background: #fff; cursor: pointer; color: var(--text-2); }
+.family-pick button:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-50); color: var(--brand-600); }
+.family-pick button:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ---- my policies ---- */
+.pending-list { display: grid; gap: .6rem; margin-bottom: .5rem; }
+.pending-card { display: flex; align-items: center; gap: .9rem; background: #fff; border: 1px solid var(--border); border-left: 4px solid #f5b83d; border-radius: 12px; padding: .8rem 1rem; color: inherit; box-shadow: var(--shadow); flex-wrap: wrap; }
+.pending-card:hover { border-color: var(--brand); text-decoration: none; }
+.pending-amt { font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+.pending-amt small { color: var(--muted); font-weight: 500; }
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+.seg button { font: inherit; font-size: .85rem; font-weight: 600; border: none; background: none; padding: .3rem .8rem; border-radius: 8px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: #fff; color: var(--navy); box-shadow: var(--shadow); }
+.policy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.policy-tile { background: #fff; border: 1px solid var(--border); border-top: 4px solid var(--brand); border-radius: 16px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .45rem; color: inherit; box-shadow: var(--shadow); transition: transform .15s var(--ease), box-shadow .15s; }
+.policy-tile.life { border-top-color: #5b4bb7; }
+.policy-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); text-decoration: none; }
+.policy-tile h3 { margin: .2rem 0 0; }
+.tile-amt { font-size: 1.5rem; font-weight: 750; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tile-amt small { font-size: .85rem; font-weight: 500; color: var(--muted); }
+.tile-people { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .85rem; margin-top: .2rem; }
+.tile-people .avatars { display: inline-flex; }
+.tile-people .avatar { width: 26px; height: 26px; font-size: .62rem; border: 2px solid #fff; margin-left: -6px; }
+.tile-people .avatar:first-child { margin-left: 0; }
+.tile-people .names { color: var(--text-2); }
+.tile-due { font-size: .85rem; color: var(--warn); background: var(--warn-50); border-radius: 8px; padding: .3rem .55rem; align-self: flex-start; }

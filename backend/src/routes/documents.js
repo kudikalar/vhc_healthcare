@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/auth.js';
 import { bad } from '../utils/errors.js';
 import { assertDocumentAccess, assertEntityAccess, MEDICAL_CATEGORIES } from '../services/access.js';
 import { audit } from '../services/audit.js';
+import { loadBlob, saveBlob } from '../services/remoteStore.js';
 
 const r = Router();
 export const MAX_BYTES = 5 * 1024 * 1024;
@@ -24,7 +25,7 @@ function sniff(buf) {
 
 r.use(authenticate);
 
-r.post('/', upload.single('file'), (req, res) => {
+r.post('/', upload.single('file'), async (req, res) => {
   const { entityType, entityId, category = 'other', description = '' } = req.body || {};
   if (!req.file) throw bad('A file is required');
   if (!CATEGORIES.includes(category)) throw bad(`category must be one of ${CATEGORIES.join(', ')}`);
@@ -34,6 +35,7 @@ r.post('/', upload.single('file'), (req, res) => {
   const id = newId('doc');
   fs.mkdirSync(STORAGE_DIR, { recursive: true });
   fs.writeFileSync(path.join(STORAGE_DIR, `${id}.bin`), req.file.buffer);
+  await saveBlob(id, req.file.buffer); // durable copy when a remote store is configured (serverless)
   const doc = tx(() => {
     const d = db.insert('documents', {
       id, entityType, entityId, category, description, filename: path.basename(req.file.originalname).slice(0, 120),
@@ -53,13 +55,17 @@ r.get('/', (req, res) => {
   res.json(docs);
 });
 
-r.get('/:id/download', (req, res) => {
+r.get('/:id/download', async (req, res) => {
   const doc = assertDocumentAccess(req.user, db.get('documents', req.params.id));
   tx(() => audit(req.user, MEDICAL_CATEGORIES.includes(doc.category) ? 'MEDICAL_DOCUMENT_ACCESSED' : 'DOCUMENT_ACCESSED', doc.entityType, doc.entityId, { documentId: doc.id, category: doc.category }));
   res.setHeader('Content-Type', doc.mime);
   res.setHeader('Content-Disposition', `attachment; filename="${doc.filename.replace(/"/g, '')}"`);
   res.setHeader('Cache-Control', 'private, no-store');
-  fs.createReadStream(path.join(STORAGE_DIR, `${doc.id}.bin`)).pipe(res);
+  const file = path.join(STORAGE_DIR, `${doc.id}.bin`);
+  if (fs.existsSync(file)) return fs.createReadStream(file).pipe(res);
+  const blob = await loadBlob(doc.id);
+  if (!blob) throw bad('This file is not available on this server. Please upload it again.');
+  return res.end(blob);
 });
 
 export default r;

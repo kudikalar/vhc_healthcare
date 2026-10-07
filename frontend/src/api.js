@@ -57,6 +57,7 @@ export const api = {
   post: (p, b = {}, opts) => request('POST', p, b, opts),
   put: (p, b) => request('PUT', p, b),
   patch: (p, b) => request('PATCH', p, b),
+  delete: (p) => request('DELETE', p),
   upload: (p, form) => request('POST', p, form),
   async download(path, filename) {
     const res = await request('GET', path, undefined, { raw: true });

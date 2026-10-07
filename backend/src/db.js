@@ -18,6 +18,7 @@ export const COLLECTIONS = [
   'users', 'plans', 'hospitals', 'quotes', 'applications', 'documents', 'payments', 'payouts',
   'policies', 'healthClaims', 'lifeClaims', 'claimantAccounts', 'reinstatements',
   'notifications', 'auditLogs', 'exceptions', 'sessions', 'challenges', 'consents', 'loginAttempts',
+  'familyMembers',
 ];
 
 let state = null;
@@ -39,7 +40,24 @@ export function load() {
   return state;
 }
 
+let dirty = false;
+/** True once since the last call if any transaction committed (used by remote persistence). */
+export function takeDirty() {
+  const d = dirty;
+  dirty = false;
+  return d;
+}
+/** Replace the in-memory state without persisting (used when loading from a remote store). */
+export function adoptState(next) {
+  state = next;
+  for (const c of COLLECTIONS) state[c] ||= [];
+  state.counters ||= {};
+  state.meta ||= { clockOffsetMs: 0 };
+}
+export const snapshotState = () => JSON.stringify(load());
+
 export function persist() {
+  dirty = true;
   if (IN_MEMORY || !state) return;
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = `${DB_FILE}.tmp`;

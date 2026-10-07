@@ -4,34 +4,105 @@ import { BucketFilterNote } from './CustomerPages.jsx';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { date, dateTime, money, pct, titleCase } from '../../format.js';
-import { Alert, Badge, Card, DevHint, ErrorBox, Field, KV, Loading, Modal, PageHeader, Table, Tabs, useAction, useLoad } from '../../components/ui.jsx';
+import { Alert, Badge, Card, DevHint, Empty, ErrorBox, Field, KV, Loading, Modal, PageHeader, Table, Tabs, useAction, useLoad } from '../../components/ui.jsx';
+import Icon from '../../components/Icon.jsx';
 import { NomineeEditor, blankNominee } from '../../components/Editors.jsx';
 import DocumentPanel from '../../components/DocumentPanel.jsx';
 import PayButton from '../../components/PayButton.jsx';
 
+const CLOSED_APPS = ['Issued', 'Rejected', 'Offer Declined'];
+const NEXT_STEP = {
+  Draft: 'Finish and submit your application',
+  'More Information Required': 'We need more information from you',
+  Approved: 'Accept the offer and pay the first premium',
+  'Offer Accepted': 'Pay the first premium to issue your policy',
+  Submitted: 'Waiting for review',
+  'Initial Review': 'Being checked by our team',
+  Underwriting: 'With the underwriter',
+};
+
 export function Policies() {
   const [params] = useSearchParams();
   const bucket = params.get('bucket') || '';
-  const res = useLoad(() => api.get(`/policies${bucket ? `?bucket=${bucket}` : ''}`), [bucket]);
-  const nav = useNavigate();
+  const res = useLoad(() => Promise.all([api.get(`/policies${bucket ? `?bucket=${bucket}` : ''}`), api.get('/applications')]), [bucket]);
+  const [filter, setFilter] = useState('all');
+  if (res.loading) return <><PageHeader title="My policies" /><Loading /></>;
+  if (res.error) return <><PageHeader title="My policies" /><ErrorBox error={res.error} /><button className="btn" onClick={res.reload}>Try again</button></>;
+  const [policies, apps] = res.data;
+  const inProgress = apps.filter((a) => !CLOSED_APPS.includes(a.status));
+  const shown = policies.filter((p) => filter === 'all' || p.product === filter);
+
   return (
     <>
-      <PageHeader title="My policies" subtitle="Previous policies are kept with their claim history after renewal." />
+      <PageHeader title="My policies" subtitle="Your issued cover, who it protects, and applications on their way to becoming policies."
+        actions={<><Link className="btn secondary" to="/family">Add family member</Link><Link className="btn" to="/quote">Buy a new policy</Link></>} />
       <BucketFilterNote bucket={bucket} path="/policies" />
-      <Card>
-        {res.loading ? <Loading /> : (
-          <Table rows={res.data} empty="No policies yet." onRowClick={(p) => nav(`/policies/${p.id}`)}
-            columns={[
-              { key: 'policyNumber', label: 'Policy' },
-              { key: 'planName', label: 'Plan' },
-              { key: 'holderName', label: 'Holder' },
-              { key: 'period', label: 'Coverage period', render: (p) => `${date(p.startDate)} – ${date(p.endDate)}` },
-              { key: 'cover', label: 'Cover', num: true, render: (p) => money(p.coverage ?? p.sumAssured) },
-              { key: 'status', label: 'Status', render: (p) => <Badge>{p.status}</Badge> },
-            ]} />
+
+      {inProgress.length > 0 && (
+        <>
+          <div className="section-title" style={{ marginTop: 0 }}><Icon name="clipboard" /><h2>On the way ({inProgress.length})</h2></div>
+          <div className="pending-list">
+            {inProgress.map((a) => (
+              <Link key={a.id} to={`/applications/${a.id}`} className="pending-card">
+                <span className={`chip ${a.product === 'life' ? 'life' : ''}`}>{titleCase(a.product)}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <strong>{a.planName}</strong> <small className="muted">· {a.applicationNumber}</small>
+                  <div className="muted" style={{ fontSize: '.88rem' }}>{NEXT_STEP[a.status] || a.status}</div>
+                </div>
+                <Badge kind={['Approved', 'Offer Accepted', 'More Information Required', 'Draft'].includes(a.status) ? 'warn' : 'info'}>{a.status}</Badge>
+                {a.premium != null && <span className="pending-amt">{money(a.premium)}<small>/yr</small></span>}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="section-title row between">
+        <span className="row"><Icon name="shield" /><h2 style={{ margin: 0 }}>Issued policies ({policies.length})</h2></span>
+        {policies.length > 0 && (
+          <span className="seg" role="group" aria-label="Filter by product">
+            {[['all', 'All'], ['health', 'Health'], ['life', 'Life']].map(([v, l]) => <button key={v} type="button" className={filter === v ? 'on' : ''} onClick={() => setFilter(v)}>{l}</button>)}
+          </span>
         )}
-      </Card>
+      </div>
+      {shown.length === 0 ? (
+        <Card>
+          <Empty>
+            <p style={{ marginTop: 0 }}>{policies.length ? 'No policies match this filter.' : inProgress.length ? 'Your first policy will appear here once its application is approved and the first premium is paid.' : "You don't have any policies yet."}</p>
+            <Link className="btn" to="/quote">Get a quote</Link>
+          </Empty>
+        </Card>
+      ) : (
+        <div className="policy-grid">
+          {shown.map((p) => <PolicyTile key={p.id} p={p} />)}
+        </div>
+      )}
     </>
+  );
+}
+
+function PolicyTile({ p }) {
+  const people = p.product === 'health' ? (p.members || []).map((m) => m.fullName) : [p.lifeAssured?.fullName].filter(Boolean);
+  return (
+    <Link to={`/policies/${p.id}`} className={`policy-tile ${p.product}`}>
+      <div className="row between"><span className={`chip ${p.product === 'life' ? 'life' : ''}`}>{p.product === 'health' ? `Health · ${titleCase(p.planType)}` : 'Term life'}</span><Badge kind={p.status === 'Active' ? 'ok' : ['Grace Period', 'Upcoming'].includes(p.status) ? 'warn' : p.status === 'Lapsed' ? 'error' : undefined}>{p.status}</Badge></div>
+      <h3>{p.planName}</h3>
+      <small className="muted">{p.policyNumber} · {date(p.startDate)} – {date(p.endDate)}</small>
+      <div className="tile-amt">{money(p.product === 'health' ? p.coverage : p.sumAssured)}<small>{p.product === 'health' ? (p.planType === 'floater' ? ' shared sum insured' : ' sum insured') : ' life cover'}</small></div>
+      {p.product === 'health' && p.balance && (
+        <div className="stacked-meter" title={`${money(p.balance.available)} available`}>
+          <span className="paid" style={{ width: `${(p.balance.paid / p.balance.total) * 100}%` }} />
+          <span className="reserved" style={{ width: `${(p.balance.reserved / p.balance.total) * 100}%` }} />
+          <span className="avail" style={{ width: `${(p.balance.available / p.balance.total) * 100}%` }} />
+        </div>
+      )}
+      <div className="tile-people">
+        <span className="muted">{p.product === 'health' ? 'Covers' : 'Life assured'}</span>
+        <span className="avatars">{people.map((n) => <span key={n} className="avatar" title={n}>{n.split(' ').map((x) => x[0]).slice(0, 2).join('')}</span>)}</span>
+        <span className="names">{people.join(', ')}</span>
+      </div>
+      {p.nextDue && <div className="tile-due">Next premium {money(p.nextDue.amount)} due {date(p.nextDue.dueDate)}</div>}
+    </Link>
   );
 }
 

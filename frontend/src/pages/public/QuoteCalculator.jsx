@@ -33,6 +33,27 @@ export default function QuoteCalculator() {
   }, [plans.data]);
   useEffect(() => { if (plan?.product === 'health' && !h.coverage) setH((x) => ({ ...x, coverage: plan.config.coverageOptions[0].amount })); }, [plan]); // eslint-disable-line
   useEffect(() => setQuote(null), [planId, h, l]);
+
+  // Family roster: lets customers pick insured members instead of retyping them (/quote?family=id1,id2 prefills).
+  const [family, setFamily] = useState(null);
+  useEffect(() => {
+    if (user?.role !== 'customer') return;
+    Promise.all([api.get('/family'), api.get('/profile')])
+      .then(([roster, prof]) => setFamily({ roster, self: prof.profile?.dob ? { id: 'self', fullName: prof.legalName || prof.name, dob: prof.profile.dob, relationship: 'self' } : null }))
+      .catch(() => {});
+  }, [user]);
+  const famParam = params.get('family');
+  useEffect(() => {
+    if (!famParam || !family || !plans.data) return;
+    const ids = famParam.split(',');
+    const picked = family.roster.filter((m) => ids.includes(m.id)).map(({ fullName, dob, relationship }) => ({ fullName, dob, relationship }));
+    if (!picked.length) return;
+    const target = list.find((p) => p.product === 'health' && p.type === (picked.length > 1 ? 'floater' : 'individual'));
+    if (!target) return;
+    setProduct('health');
+    setPlanId(target.id);
+    setH((x) => ({ ...x, coverage: target.config.coverageOptions[0].amount, members: picked }));
+  }, [famParam, family, plans.data]); // eslint-disable-line react-hooks/exhaustive-deps
   if (plans.loading) return <Loading />;
 
   const calc = () => act.run(async () => {
@@ -52,6 +73,11 @@ export default function QuoteCalculator() {
     nav(`/applications/${app.id}`);
   });
 
+  const addFromFamily = (m) => {
+    const entry = { fullName: m.fullName, dob: m.dob, relationship: m.relationship };
+    const blank = h.members.findIndex((x) => !x.fullName && !x.dob);
+    setH({ ...h, members: blank >= 0 ? h.members.map((x, k) => (k === blank ? entry : x)) : [...h.members, entry] });
+  };
   const setMember = (i, patch) => setH({ ...h, members: h.members.map((m, k) => (k === i ? { ...m, ...patch } : m)) });
   const toggle = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
@@ -77,6 +103,23 @@ export default function QuoteCalculator() {
                 </Field>
                 <div className="full">
                   <strong>Insured members</strong> <small>(max {plan.config.maxMembers})</small>
+                  {family && (family.self || family.roster.length > 0) && (
+                    <div className="family-pick" role="group" aria-label="Add from your family">
+                      <small className="muted" style={{ alignSelf: 'center' }}>Add from your family:</small>
+                      {[family.self, ...family.roster].filter(Boolean).map((m) => {
+                        const added = h.members.some((x) => x.fullName === m.fullName && x.dob === m.dob);
+                        const eligible = plan.config.eligibleRelationships.includes(m.relationship);
+                        const full = h.members.filter((x) => x.fullName || x.dob).length >= plan.config.maxMembers;
+                        return (
+                          <button key={m.id} type="button" disabled={added || !eligible || full} onClick={() => addFromFamily(m)}
+                            title={added ? 'Already added' : !eligible ? `${titleCase(m.relationship)} is not eligible on this plan` : full ? 'This plan is full' : ''}>
+                            {added ? '✓' : '+'} {m.id === 'self' ? 'Me' : m.fullName.split(' ')[0]} <span className="muted">({m.relationship})</span>
+                          </button>
+                        );
+                      })}
+                      <Link to="/family" style={{ fontSize: '.85rem', alignSelf: 'center' }}>Manage family</Link>
+                    </div>
+                  )}
                   {h.members.map((m, i) => (
                     <div key={i} className="form-grid" style={{ marginTop: '.4rem' }}>
                       <Field label="Name"><input value={m.fullName} onChange={(e) => setMember(i, { fullName: e.target.value })} /></Field>
