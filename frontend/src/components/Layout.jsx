@@ -57,6 +57,13 @@ function useClock() {
   return c;
 }
 
+/** Staging health: warns when the deployment has no shared data store (sign-ins would not stick). */
+function useStoreWarning() {
+  const [w, setW] = useState(null);
+  useEffect(() => { api.get('/health', { quiet401: true }).then((h) => setW(h?.store?.warning || null)).catch(() => {}); }, []);
+  return w;
+}
+
 function useOnline() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   useEffect(() => {
@@ -81,6 +88,7 @@ export default function Layout() {
   const unread = useUnread(user);
   const clock = useClock();
   const online = useOnline();
+  const storeWarning = useStoreWarning();
   const [drawer, setDrawer] = useState(false);
   const groups = user ? [...(NAV[user.role] || []), ...moduleNav(user.role)] : [];
   const bare = BARE.includes(loc.pathname);
@@ -105,6 +113,9 @@ export default function Layout() {
         <span className="sim-long">Fictional products, people and hospitals · simulated payments — no real money is charged.</span>
         <span className="sim-short">Demo data · no real money is charged</span>
       </div>
+      {storeWarning && (
+        <div className="store-bar" role="alert"><Icon name="alert" size={16} /> <span><strong>Staging storage is not connected.</strong> Each server copy keeps separate data, so you may be signed out or lose changes. Connect Upstash Redis to the Vercel project to fix this.</span></div>
+      )}
       {!online && (
         <div className="offline-bar" role="status"><Icon name="offline" size={16} /> You're offline. Changes can't be saved until your connection returns.</div>
       )}

@@ -242,3 +242,5 @@ label:has(> input[type=checkbox]) { display: inline-flex; align-items: center; g
 label:has(> input[type=checkbox]) > input[type=checkbox] { margin-top: 0; }
 td:first-child a, td:first-child { overflow-wrap: normal; }
 .table-wrap td:first-child { white-space: nowrap; }
+.store-bar { background: #fdecea; color: #8a1c13; border-bottom: 1px solid #f3c4bf; display: flex; gap: .5rem; align-items: center; justify-content: center; padding: .5rem 1rem; font-size: .88rem; text-align: left; }
+.store-bar .icon { flex-shrink: 0; }

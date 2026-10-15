@@ -1,7 +1,7 @@
-// Optional durable storage for serverless deployments (Vercel), using an Upstash Redis REST endpoint.
-// Enabled only when KV_REST_API_URL/KV_REST_API_TOKEN (Vercel's Upstash integration) or
-// UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN are set; otherwise every function is a no-op and
-// the app keeps its normal file/in-memory storage.
+// Shared durable storage for serverless deployments (Vercel), using Redis — either Upstash's REST API or
+// a redis:// connection (see detectStore below for the variable names recognised). When no store is
+// configured every function is a no-op and the app keeps its normal file/in-memory storage; on Vercel
+// that means each instance has separate data, which /api/health and the app's warning bar report.
 //
 // Model: the whole JSON document store is saved under one key with a version counter.
 //
@@ -16,18 +16,44 @@
 import crypto from 'node:crypto';
 import { adoptState, snapshotState, takeDirty } from '../db.js';
 
-const URL_ = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Which store is connected. Vercel's integrations name variables differently (and allow a custom prefix):
+//   Upstash for Redis / Vercel KV → <PREFIX>KV_REST_API_URL + <PREFIX>KV_REST_API_TOKEN (REST)
+//   Upstash direct                → UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (REST)
+//   Redis (Redis Cloud) / KV_URL  → <PREFIX>REDIS_URL or <PREFIX>KV_URL (redis:// or rediss://, TCP)
+function detectStore(env = process.env) {
+  const keys = Object.keys(env).filter((k) => env[k]);
+  const restUrl = keys.find((k) => /(^|_)KV_REST_API_URL$/.test(k)) || keys.find((k) => /UPSTASH_REDIS_REST_URL$/.test(k));
+  if (restUrl) {
+    const tokenKey = restUrl.replace(/URL$/, 'TOKEN');
+    if (env[tokenKey]) return { kind: 'rest', url: env[restUrl], token: env[tokenKey], vars: [restUrl, tokenKey] };
+  }
+  const tcp = keys.find((k) => /(^|_)REDIS_URL$/.test(k) && /^rediss?:\/\//.test(env[k])) || keys.find((k) => /(^|_)KV_URL$/.test(k) && /^rediss?:\/\//.test(env[k]));
+  if (tcp) return { kind: 'tcp', url: env[tcp], vars: [tcp] };
+  return { kind: null, vars: [] };
+}
+const STORE = detectStore();
 const PREFIX = process.env.VHC_STORE_PREFIX || 'vhc';
 const LOCK_KEY = `${PREFIX}:lock`;
 const LOCK_TTL_MS = 20_000; // safety expiry if an instance dies while holding the lock
 const LOCK_WAIT_MS = 20_000; // give up (503, safe to retry) after this long
-export const remoteEnabled = () => Boolean(URL_ && TOKEN);
+export const remoteEnabled = () => Boolean(STORE.kind);
+const SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+
+let tcpClient = null;
+async function tcp() {
+  if (!tcpClient) {
+    const { default: Redis } = await import('ioredis');
+    tcpClient = new Redis(STORE.url, { maxRetriesPerRequest: 2, enableReadyCheck: true, lazyConnect: false });
+    tcpClient.on('error', (e) => noteError(e));
+  }
+  return tcpClient;
+}
 
 async function redis(...command) {
-  const res = await fetch(URL_, {
+  if (STORE.kind === 'tcp') return (await tcp()).call(...command.map(String));
+  const res = await fetch(STORE.url, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${STORE.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(command),
   });
   const body = await res.json().catch(() => ({}));
@@ -39,8 +65,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let localVersion = null;
 let lastSaved = null; // JSON of the state as last loaded/saved — used to skip saves when nothing changed
-export const storeStatus = { mode: remoteEnabled() ? 'redis' : 'local', version: null, lastError: null, lastErrorAt: null, lockWaitMs: 0 };
-const noteError = (e) => { storeStatus.lastError = e.message; storeStatus.lastErrorAt = new Date().toISOString(); };
+// Reported by /api/health (variable names only, never values).
+export const storeStatus = {
+  mode: STORE.kind ? `redis-${STORE.kind}` : 'local', connectedVia: STORE.vars,
+  shared: Boolean(STORE.kind),
+  warning: !STORE.kind && SERVERLESS ? 'No shared data store is connected. Each serverless instance keeps its own data, so sign-ins and changes are lost between requests. Connect Upstash Redis to this Vercel project.' : null,
+  version: null, lastError: null, lastErrorAt: null, lockWaitMs: 0,
+};
+function noteError(e) { storeStatus.lastError = e.message; storeStatus.lastErrorAt = new Date().toISOString(); }
 
 /** Acquires the store lock; returns a token (null when no remote store). Throws when the store stays busy. */
 export async function acquireLock() {
