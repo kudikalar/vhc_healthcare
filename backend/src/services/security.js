@@ -9,6 +9,29 @@ export const sha256 = (s) => crypto.createHash('sha256').update(String(s)).diges
 export const randomToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
 const PROD = process.env.NODE_ENV === 'production';
 
+// ---------------- signed (stateless) sessions ----------------
+// When the deployment has no shared data store (several serverless instances, each with its own memory),
+// a session created on one instance is unknown to the others. In that mode the session cookie carries a
+// signed, expiring description of the session, and any instance can verify it and rebuild the session
+// record locally. Enabled only by VHC_STATELESS_SESSIONS=1 (set by the Vercel entry when no store is
+// connected). Signing key: SESSION_SECRET, or a per-deployment key derived from Vercel's deployment id.
+const STATELESS = () => process.env.VHC_STATELESS_SESSIONS === '1';
+const signingKey = () => process.env.SESSION_SECRET
+  || sha256(`vhc-session:${process.env.VERCEL_PROJECT_ID || ''}:${process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_URL || 'local'}`);
+const sign = (data) => crypto.createHmac('sha256', signingKey()).update(data).digest('base64url');
+function signedToken(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `v1.${body}.${sign(body)}`;
+}
+function verifySignedToken(token) {
+  const m = /^v1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(String(token));
+  if (!m) return null;
+  const expect = Buffer.from(sign(m[1]));
+  const got = Buffer.from(m[2]);
+  if (expect.length !== got.length || !crypto.timingSafeEqual(expect, got)) return null;
+  try { return JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8')); } catch { return null; }
+}
+
 // ---------------- validators ----------------
 const NAME_RE = /^[\p{L}\p{M}'’ -]+$/u;
 const charLen = (s) => [...s].length;
@@ -99,11 +122,14 @@ const TOUCH_EVERY_MS = 60 * 1000;
 export function createSession(res, req, { subjectId, role, remember = false }) {
   const isStaff = !['customer', 'claimant'].includes(role);
   const remembered = !!remember && !isStaff; // staff sessions never use "remember this device"
-  const token = randomToken();
   const csrfToken = randomToken(24);
   const t = Date.now();
+  const sid = `ses_${crypto.randomBytes(8).toString('hex')}`;
+  const token = STATELESS()
+    ? signedToken({ sid, sub: subjectId, role, csrf: csrfToken, iat: t, exp: t + (remembered ? REMEMBER_MS : ABSOLUTE_MS), rem: remembered, n: randomToken(8) })
+    : randomToken();
   const session = db.insert('sessions', {
-    tokenHash: sha256(token), subjectId, role, csrfToken, remembered,
+    id: sid, tokenHash: sha256(token), subjectId, role, csrfToken, remembered,
     createdAtMs: t, lastSeenAtMs: t,
     idleMs: remembered ? REMEMBER_MS : IDLE_MS,
     absoluteExpiresAtMs: t + (remembered ? REMEMBER_MS : ABSOLUTE_MS),
@@ -132,14 +158,28 @@ export function sessionPublic(s) {
 export function resolveSession(req) {
   const token = parseCookies(req)[SESSION_COOKIE];
   if (!token) throw new AppError(401, 'Please sign in to continue.', { code: 'NO_SESSION' });
-  const s = db.findOne('sessions', (x) => x.tokenHash === sha256(token));
+  let s = db.findOne('sessions', (x) => x.tokenHash === sha256(token));
   const t = Date.now();
+  if (!s && STATELESS()) s = adoptSignedSession(token, t);
   if (!s || s.revokedAt) throw new AppError(401, 'Your session has ended. Please sign in again.', { code: 'SESSION_REVOKED' });
   if (t > s.absoluteExpiresAtMs || t > s.lastSeenAtMs + s.idleMs) {
     throw new AppError(401, 'Your session has expired. Please sign in again.', { code: 'SESSION_EXPIRED' });
   }
   if (t - s.lastSeenAtMs > TOUCH_EVERY_MS) tx(() => { s.lastSeenAtMs = t; });
   return s;
+}
+
+/** Rebuilds a session created by another instance from its signed cookie (stateless mode only). */
+function adoptSignedSession(token, t) {
+  const p = verifySignedToken(token);
+  if (!p || !p.sid || !p.sub || t > p.exp) return null;
+  const existing = db.get('sessions', p.sid);
+  if (existing) return existing.tokenHash === sha256(token) ? existing : null;
+  return db.insert('sessions', {
+    id: p.sid, tokenHash: sha256(token), subjectId: p.sub, role: p.role, csrfToken: p.csrf, remembered: !!p.rem,
+    createdAtMs: p.iat, lastSeenAtMs: t, idleMs: p.rem ? REMEMBER_MS : IDLE_MS, absoluteExpiresAtMs: p.exp,
+    revokedAt: null, ip: null, userAgent: 'adopted from signed cookie', adopted: true,
+  });
 }
 
 export function revokeSession(s, reason = 'logout') {

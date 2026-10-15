@@ -14,10 +14,16 @@ process.env.STORAGE_DIR ??= '/tmp/vhc-storage';
 process.env.NODE_ENV = process.env.VHC_NODE_ENV || 'development';
 
 const { createApp } = await import('../../backend/src/app.js');
-const { db } = await import('../../backend/src/db.js');
+const { db, withDeterministicRandom } = await import('../../backend/src/db.js');
 const { resetAndSeed, runStartupMigrations } = await import('../../backend/src/services/seed.js');
 const { runJobs } = await import('../../backend/src/services/jobs.js');
 const { acquireLock, invalidateLocal, noteStoreError, releaseLock, remoteEnabled, syncIn, syncOut } = await import('../../backend/src/services/remoteStore.js');
+
+// Without a shared store, every instance has its own memory. Two things keep sign-in working anyway:
+// signed session cookies any instance can verify, and identical demo data on every instance (seeded
+// with fixed randomness). New changes still stay on the instance that made them until a store is added.
+if (!remoteEnabled()) process.env.VHC_STATELESS_SESSIONS = '1';
+const DEMO_SEED = 20261016;
 
 const app = createApp();
 let booted = false;
@@ -29,7 +35,10 @@ async function prepare() {
     resetAndSeed();
     await syncOut(true);
   } else if (!remoteEnabled() && db.all('users').length === 0) {
-    resetAndSeed();
+    withDeterministicRandom(DEMO_SEED, () => {
+      resetAndSeed();
+      runStartupMigrations();
+    });
   }
   if (!booted) {
     // Existing data: add new platform records without touching existing accounts or policies.

@@ -76,6 +76,38 @@ export function replaceState(next) {
 }
 
 export const meta = () => load().meta;
+/**
+ * Runs fn with all randomness (crypto.randomBytes/randomInt, Math.random) drawn from a seeded generator,
+ * so every serverless instance that seeds the demo data produces identical ids and references. Used only
+ * when no shared store is connected (see frontend/api/index.js); never for real data.
+ */
+export function withDeterministicRandom(seed, fn) {
+  const orig = { randomBytes: crypto.randomBytes, randomInt: crypto.randomInt, random: Math.random };
+  let a = seed >>> 0;
+  const next = () => { // mulberry32
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  crypto.randomBytes = (n, cb) => {
+    const b = Buffer.alloc(n);
+    for (let i = 0; i < n; i += 1) b[i] = Math.floor(next() * 256);
+    if (cb) { cb(null, b); return undefined; }
+    return b;
+  };
+  crypto.randomInt = (min, max) => { if (max === undefined) { max = min; min = 0; } return min + Math.floor(next() * (max - min)); };
+  Math.random = next;
+  try {
+    return fn();
+  } finally {
+    crypto.randomBytes = orig.randomBytes;
+    crypto.randomInt = orig.randomInt;
+    Math.random = orig.random;
+  }
+}
+
 export const newId = (prefix) => `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
 export function nextSeq(name) {
   const s = load();

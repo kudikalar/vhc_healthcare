@@ -114,7 +114,7 @@ export default function Layout() {
         <span className="sim-short">Demo data · no real money is charged</span>
       </div>
       {storeWarning && (
-        <div className="store-bar" role="alert"><Icon name="alert" size={16} /> <span><strong>Staging storage is not connected.</strong> Each server copy keeps separate data, so you may be signed out or lose changes. Connect Upstash Redis to the Vercel project to fix this.</span></div>
+        <div className="store-bar" role="alert"><Icon name="alert" size={16} /> <span><strong>Staging storage is not connected.</strong> Sign-in and demo data work, but new changes may not be saved until Upstash Redis is connected to the Vercel project.</span></div>
       )}
       {!online && (
         <div className="offline-bar" role="status"><Icon name="offline" size={16} /> You're offline. Changes can't be saved until your connection returns.</div>

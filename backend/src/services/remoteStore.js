@@ -69,7 +69,7 @@ let lastSaved = null; // JSON of the state as last loaded/saved — used to skip
 export const storeStatus = {
   mode: STORE.kind ? `redis-${STORE.kind}` : 'local', connectedVia: STORE.vars,
   shared: Boolean(STORE.kind),
-  warning: !STORE.kind && SERVERLESS ? 'No shared data store is connected. Each serverless instance keeps its own data, so sign-ins and changes are lost between requests. Connect Upstash Redis to this Vercel project.' : null,
+  warning: !STORE.kind && SERVERLESS ? 'No shared data store is connected. Sign-in and the demo data work, but changes you make (applications, payments, claims) may not be saved. Connect Upstash Redis to this Vercel project to keep them.' : null,
   version: null, lastError: null, lastErrorAt: null, lockWaitMs: 0,
 };
 function noteError(e) { storeStatus.lastError = e.message; storeStatus.lastErrorAt = new Date().toISOString(); }
