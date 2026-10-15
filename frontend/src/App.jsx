@@ -1,9 +1,9 @@
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { homeFor, useAuth } from './auth.jsx';
+import { homeFor, INTERNAL_STAFF, PARTNER_ROLES, useAuth } from './auth.jsx';
 import Layout from './components/Layout.jsx';
 import { Loading } from './components/ui.jsx';
 import { AcceptInvite, ForgotPassword, Login, Register, ResetPassword, VerifyEmail } from './pages/public/Auth.jsx';
-import { Hospitals, Plans } from './pages/public/Catalogue.jsx';
+import { Plans } from './pages/public/Catalogue.jsx';
 import Landing from './pages/public/Landing.jsx';
 import { AssistantPage, ClaimEstimator, NeedsPlanner } from './pages/customer/Tools.jsx';
 import Insights from './pages/staff/Insights.jsx';
@@ -13,7 +13,6 @@ import Dashboard from './pages/customer/Dashboard.jsx';
 import Profile from './pages/customer/Profile.jsx';
 import Family from './pages/customer/Family.jsx';
 import Documents from './pages/customer/Documents.jsx';
-import Support from './pages/customer/Support.jsx';
 import ApplicationDetail from './pages/customer/ApplicationDetail.jsx';
 import { Policies, PolicyDetail } from './pages/customer/Policies.jsx';
 import { ClaimDetail, ClaimsList, NewClaim } from './pages/customer/Claims.jsx';
@@ -22,6 +21,7 @@ import { ApplicationQueue, UnderwritingWorkspace } from './pages/staff/StaffAppl
 import { HealthClaimReview, HealthClaimsQueue, LifeClaimReview, LifeClaimsQueue } from './pages/staff/StaffClaims.jsx';
 import { ExceptionQueue, OpsDashboard, PayoutReview, Reinstatements } from './pages/staff/StaffOps.jsx';
 import { DevTools, HospitalAdmin, NotificationAdmin, PlanConfig, ReportsAudit, UserAdmin } from './pages/admin/AdminPages.jsx';
+import { moduleRoutes } from './modules.js';
 
 /** Route guard: requires login and (optionally) one of the given roles. */
 function Guard({ roles, children }) {
@@ -48,6 +48,7 @@ const STAFF_ALL = ['agent', 'underwriter', 'claims_officer', 'admin'];
 const UW = ['agent', 'underwriter', 'admin'];
 const CLAIMS = ['claims_officer', 'admin'];
 const ADMIN = ['admin'];
+const SIGNED_IN = [...C, ...INTERNAL_STAFF, ...Object.keys(PARTNER_ROLES)];
 const g = (roles, el) => <Guard roles={roles}>{el}</Guard>;
 
 export default function App() {
@@ -67,13 +68,11 @@ export default function App() {
         <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/plans" element={<Plans />} />
         <Route path="/quote" element={<QuoteCalculator />} />
-        <Route path="/hospitals" element={<Hospitals />} />
         <Route path="/life-claim" element={<LifeClaimPortal />} />
-        <Route path="/support" element={<Support />} />
 
         <Route path="/dashboard" element={g(C, <Dashboard />)} />
-        <Route path="/profile" element={g([...C, ...STAFF_ALL], <Profile />)} />
-        <Route path="/notifications" element={g([...C, ...STAFF_ALL], <Notifications />)} />
+        <Route path="/profile" element={g(SIGNED_IN, <Profile />)} />
+        <Route path="/notifications" element={g(SIGNED_IN, <Notifications />)} />
         <Route path="/applications" element={g(C, <Applications />)} />
         <Route path="/applications/:id" element={g(C, <ApplicationDetail />)} />
         <Route path="/policies" element={g(C, <Policies />)} />
@@ -105,6 +104,7 @@ export default function App() {
         <Route path="/admin/notifications" element={g(ADMIN, <NotificationAdmin />)} />
         <Route path="/admin/reports" element={g(ADMIN, <ReportsAudit />)} />
         <Route path="/admin/dev" element={g(ADMIN, <DevTools />)} />
+        {moduleRoutes.map((m) => <Route key={m.path} path={m.path} element={m.roles ? g(m.roles, m.element) : m.element} />)}
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

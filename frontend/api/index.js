@@ -14,6 +14,7 @@ const { createApp } = await import('../../backend/src/app.js');
 const { db } = await import('../../backend/src/db.js');
 const { resetAndSeed } = await import('../../backend/src/services/seed.js');
 const { runJobs } = await import('../../backend/src/services/jobs.js');
+const { runStartupMigrations } = await import('../../backend/src/services/seed.js');
 const { remoteEnabled, syncIn, syncOut } = await import('../../backend/src/services/remoteStore.js');
 
 const app = createApp();
@@ -28,6 +29,9 @@ const ready = (async () => {
   if (!stored || db.all('users').length === 0) {
     resetAndSeed();
     if (remoteEnabled() && !stored) await syncOut(true).catch((e) => console.error('[store] initial save failed:', e.message));
+  } else {
+    // Existing (staging) data: add new platform records without touching existing accounts or policies.
+    runStartupMigrations();
   }
   runJobs();
 })();

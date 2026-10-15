@@ -7,6 +7,7 @@ import { MemberEditor, NomineeEditor, blankMember, blankNominee } from '../../co
 import QuoteBreakdown from '../../components/QuoteBreakdown.jsx';
 import DocumentPanel from '../../components/DocumentPanel.jsx';
 import PayButton from '../../components/PayButton.jsx';
+import { DocLinks, ProductMeta, PurchaseStepper } from '../partners/common.jsx';
 
 const ynSelect = (value, onChange) => (
   <select value={value === true ? 'yes' : value === false ? 'no' : ''} onChange={(e) => onChange(e.target.value === 'yes' ? true : e.target.value === 'no' ? false : null)}>
@@ -65,13 +66,25 @@ export default function ApplicationDetail() {
 
   const run = (fn, msg) => act.run(async () => { const a = await fn(); if (a) res.setData(a); return a; }, msg);
 
+  const purchase = app.purchase || { status: app.status, flags: [] };
+  const acknowledged = !!app.journey?.find((s) => s.key === 'disclosures' && s.state === 'done');
   return (
     <>
       <PageHeader
         title={`${app.planName}`}
-        subtitle={<>Application {app.applicationNumber} · {app.renewalOf ? 'Renewal · ' : ''}created {date(app.createdAt)}</>}
-        actions={<Badge>{app.status}</Badge>}
+        subtitle={<>Application {app.applicationNumber} · {app.renewalOf ? 'Renewal · ' : ''}created {date(app.createdAt)} · workflow status: {app.status}</>}
+        actions={<Badge>{purchase.status}</Badge>}
       />
+      <ProductMeta insurer={app.insurer} uin={app.productInfo?.uin} version={app.productInfo?.version} sandbox={app.productInfo?.sandbox} />
+      <div className="pt-status-banner" role="status">
+        <strong>{purchase.status}</strong>
+        {purchase.flags.map((f) => <Badge key={f} kind={f === 'Refund Pending' ? 'warn' : 'ok'}>{f}</Badge>)}
+        {purchase.message && <span>{purchase.message}</span>}
+      </div>
+      {app.status === 'Issuance Pending' && <Alert kind="info">Payment received{purchase.paymentReference ? ` (${purchase.paymentReference})` : ''} — waiting for {app.insurer?.name || 'the insurer'} to issue your policy. Payment confirmation is not policy issuance; we will notify you as soon as the insurer decides.</Alert>}
+      {app.status === 'Declined by Insurer' && <Alert kind="error">Insurer declined — full refund initiated{purchase.refundStatus ? ` (refund ${purchase.refundStatus.replace('_', ' ')})` : ''}. {app.issuance?.reason && <>Reason given: {app.issuance.reason}</>}</Alert>}
+      {app.distribution && !app.distribution.allowed && !['Issued', 'Issuance Pending', 'Declined by Insurer'].includes(app.status) && <Alert kind="error">This product cannot be purchased right now: {app.distribution.reason}.</Alert>}
+      {app.journey && <Card title="Your purchase steps"><PurchaseStepper steps={app.journey} /></Card>}
       {act.message && <Alert kind="ok">{act.message}</Alert>}
       <ErrorBox error={act.error} />
 
@@ -164,12 +177,28 @@ export default function ApplicationDetail() {
             </div>
           </Card>
 
+          <Card title="Proposer">
+            <KV items={[['Proposer (policyholder)', app.proposer?.name || '—'], ['Profile', app.proposer?.complete ? 'Complete' : 'Incomplete']]} />
+            {app.proposer && !app.proposer.complete && <Alert kind="warn">Complete your profile before submitting: {app.proposer.problems.join('; ')}. <Link to="/profile">Open profile</Link></Alert>}
+            {!app.documentsStatus?.identity && <p className="muted" style={{ marginBottom: 0 }}>Upload an identity document in the Documents section below{app.product === 'life' ? ', plus income proof' : ''}.</p>}
+          </Card>
+
+          <Card title="Customer Information Sheet & policy wording">
+            <p className="muted" style={{ marginTop: 0 }}>Read the insurer&apos;s Customer Information Sheet (CIS) and policy wording for version {app.planVersion} before you consent. These documents govern your cover and override any summary on this site.</p>
+            <DocLinks cisUrl={`/api/partners/products/${app.planId}/cis.pdf?version=${app.planVersion}`} wordingUrl={`/api/partners/products/${app.planId}/wording.pdf?version=${app.planVersion}`} name={`${app.applicationNumber}-v${app.planVersion}`} />
+            <label className="check" style={{ marginTop: '.75rem' }}>
+              <input type="checkbox" checked={acknowledged} disabled={acknowledged || act.busy} onChange={() => run(() => api.post(`/applications/${id}/disclosures/acknowledge`, { documents: ['cis', 'wording'] }), 'Thank you — documents acknowledged')} />
+              I have read the Customer Information Sheet and the policy wording for this product version.
+            </label>
+          </Card>
+
           <Card title="Declaration & submission">
             <label className="check">
-              <input type="checkbox" checked={!!app.consent?.given} disabled={dirty} onChange={(e) => run(() => api.put(`/applications/${id}`, { consent: e.target.checked }))} />
+              <input type="checkbox" checked={!!app.consent?.given} disabled={dirty || (!acknowledged && !app.consent?.given)} onChange={(e) => run(() => api.put(`/applications/${id}`, { consent: e.target.checked }))} />
               I confirm that all declarations, including health information for every insured person, are true and complete, and I consent to their use for underwriting and claims.
             </label>
             {dirty && <small className="muted">Save your changes before giving consent.</small>}
+            {!acknowledged && !app.consent?.given && <small className="muted">Read and acknowledge the CIS and policy wording above before giving consent.</small>}
             <div className="row" style={{ marginTop: '.75rem' }}>
               <button className="btn" disabled={act.busy || dirty} onClick={() => run(() => api.post(`/applications/${id}/submit`), 'Application submitted')}>
                 {app.status === 'More Information Required' ? 'Resubmit application' : 'Submit application'}

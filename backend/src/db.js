@@ -19,7 +19,12 @@ export const COLLECTIONS = [
   'policies', 'healthClaims', 'lifeClaims', 'claimantAccounts', 'reinstatements',
   'notifications', 'auditLogs', 'exceptions', 'sessions', 'challenges', 'consents', 'loginAttempts',
   'familyMembers',
+  // Enterprise platform (phases 2–6)
+  'insurers', 'tpas', 'employers', 'events', 'ledgerEntries', 'refunds',
 ];
+
+/** Collections are created on first use, so modules can add their own without touching this list. */
+const col = (c) => (load()[c] ||= []);
 
 let state = null;
 let depth = 0;
@@ -79,14 +84,14 @@ export function nextSeq(name) {
 }
 
 export const db = {
-  all: (c) => load()[c],
-  find: (c, fn = () => true) => load()[c].filter(fn),
-  findOne: (c, fn) => load()[c].find(fn) || null,
-  get: (c, id) => load()[c].find((x) => x.id === id) || null,
+  all: (c) => col(c),
+  find: (c, fn = () => true) => col(c).filter(fn),
+  findOne: (c, fn) => col(c).find(fn) || null,
+  get: (c, id) => col(c).find((x) => x.id === id) || null,
   insert(c, obj) {
     const ts = now().toISOString();
     const rec = { id: obj.id || newId(c.slice(0, 3)), createdAt: ts, updatedAt: ts, ...obj };
-    load()[c].push(rec);
+    col(c).push(rec);
     return rec;
   },
   touch(rec) {

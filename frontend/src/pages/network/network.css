@@ -1,0 +1,46 @@
+/* Network module (directory, health services, hospital & TPA portals, network admin). Reuses the global
+   design tokens from styles.css; only module-specific layout lives here (prefix: nw-). */
+.nw-filters { display: grid; gap: .75rem 1rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); align-items: end; }
+.nw-filters .nw-checks { display: flex; flex-wrap: wrap; gap: .4rem 1rem; grid-column: 1 / -1; }
+.nw-check { display: inline-flex; align-items: center; gap: .4rem; font-size: .9rem; color: var(--text-2); cursor: pointer; }
+.nw-check input { width: 1.05rem; height: 1.05rem; accent-color: var(--brand); }
+.nw-list { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.nw-provider { display: flex; flex-direction: column; gap: .55rem; margin-bottom: 0; }
+.nw-provider h3 { margin: 0; font-size: 1.05rem; }
+.nw-provider h3 a { color: inherit; }
+.nw-meta { color: var(--muted); font-size: .88rem; }
+.nw-tags { display: flex; flex-wrap: wrap; gap: .35rem; }
+.nw-cashless { border-radius: var(--radius-sm); padding: .55rem .7rem; font-size: .88rem; border: 1px solid var(--border); background: var(--surface-2); }
+.nw-cashless.ok { background: var(--ok-50); border-color: #bfe5cf; color: var(--ok); }
+.nw-cashless.restricted, .nw-cashless.not_in_network { background: var(--warn-50); border-color: #f2dca6; color: var(--warn); }
+.nw-cashless.excluded { background: var(--danger-50); border-color: #f6cfcb; color: var(--danger); }
+.nw-cashless strong { display: block; }
+.nw-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: .35rem; }
+.nw-split { display: grid; gap: 1rem; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+@media (max-width: 900px) { .nw-split { grid-template-columns: 1fr; } }
+.nw-slots { display: flex; flex-wrap: wrap; gap: .4rem; }
+.nw-slot { font: inherit; font-size: .86rem; font-variant-numeric: tabular-nums; min-height: 36px; padding: .3rem .65rem; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; }
+.nw-slot[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+.nw-slot:disabled { opacity: .45; cursor: not-allowed; text-decoration: line-through; }
+.nw-slot:focus-visible, .nw-check input:focus-visible { outline: none; box-shadow: var(--focus); }
+.nw-payers { display: grid; gap: .5rem; }
+.nw-payer { display: flex; gap: .6rem; align-items: flex-start; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.nw-payer:has(input:checked) { border-color: var(--brand); background: var(--brand-50); }
+.nw-payer input { margin-top: .25rem; accent-color: var(--brand); }
+.nw-payer small { display: block; color: var(--muted); }
+.nw-note { font-size: .86rem; color: var(--muted); }
+.nw-pipeline { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; font-size: .82rem; }
+.nw-pipeline span { padding: .2rem .55rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); }
+.nw-pipeline span.on { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+.nw-pipeline span.done { background: var(--brand-50); border-color: var(--brand-100); color: var(--brand-600); }
+.nw-gaps { margin: .3rem 0 0 1.1rem; padding: 0; font-size: .86rem; color: var(--warn); }
+.nw-kv-wide { grid-template-columns: minmax(110px, max-content) 1fr; }
+.nw-row-wrap { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; }
+.nw-row-wrap > .field { flex: 1 1 180px; }
+.nw-scroll { max-height: 22rem; overflow: auto; }
+.nw-candidate { color: var(--warn); font-weight: 600; font-size: .8rem; }
+.nw-textarea { width: 100%; min-height: 4.5rem; font: inherit; }
+@media (max-width: 520px) {
+  .nw-actions .btn { flex: 1 1 auto; }
+  .nw-filters { grid-template-columns: 1fr 1fr; }
+}

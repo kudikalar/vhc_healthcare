@@ -14,8 +14,48 @@ import { rupees } from '../utils/money.js';
 export const AI_MODEL = process.env.VHC_AI_MODEL || 'claude-opus-5-5';
 export const aiEnabled = () => Boolean(process.env.ANTHROPIC_API_KEY) && process.env.VHC_AI_DISABLED !== '1';
 
+/** Where each evidence passage lives in the purchased product's documents (CIS = Customer Information Sheet). */
+const CIS_SECTIONS = {
+  summary: 'CIS 1 — Product and policy details', cover: 'CIS 2 — Sum insured / cover', benefits: 'CIS 3 — What is covered',
+  exclusions: 'CIS 4 — What is not covered (exclusions)', waiting: 'CIS 5 — Waiting periods', costshare: 'CIS 6 — Cost sharing (deductible, co-pay, limits)',
+  renewal: 'CIS 7 — Renewal conditions', premium: 'CIS 8 — Premium and grace period', claim: 'CIS 9 — Claims procedure',
+  members: 'Policy schedule — insured persons', nominees: 'Policy schedule — nominees', riders: 'Policy schedule — riders',
+};
+
 const pct = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 const list = (xs) => xs.filter(Boolean).join('; ');
+
+export const LANGUAGES = { en: 'English', hi: 'Hindi', te: 'Telugu' };
+const COMPLEX = /\b(complain|complaint|grievance|dispute|appeal|ombudsman|bima bharosa|legal|lawyer|court|mis-?sold|why (was|is) my claim|claim (was )?rejected|reject(ed)? my claim|talk to (a )?(human|person|agent)|speak (to|with) (a )?(human|person|someone)|call me back)/i;
+
+// Fixed phrases in the supported languages. Policy facts stay in English (the purchased wording is the authority).
+const L10N = {
+  emergency: {
+    en: 'This sounds like it may be an emergency. Call 112 (national emergency number) or go to the nearest hospital now — you do not need claim approval before urgent treatment. When you are safe, I can help you with the claim.',
+    hi: 'यह आपातकालीन स्थिति लग रही है। अभी 112 (राष्ट्रीय आपातकालीन नंबर) पर कॉल करें या नज़दीकी अस्पताल जाएँ — तुरंत इलाज के लिए क्लेम की मंज़ूरी की ज़रूरत नहीं है। सुरक्षित होने के बाद मैं क्लेम में आपकी मदद कर सकता हूँ।',
+    te: 'ఇది అత్యవసర పరిస్థితిలా ఉంది. వెంటనే 112 (జాతీయ అత్యవసర నంబర్)కు కాల్ చేయండి లేదా దగ్గరలోని ఆసుపత్రికి వెళ్ళండి — అత్యవసర చికిత్సకు ముందు క్లెయిమ్ ఆమోదం అవసరం లేదు. మీరు సురక్షితంగా ఉన్న తర్వాత క్లెయిమ్‌లో నేను సహాయం చేస్తాను.',
+  },
+  medical: {
+    en: "I can't give medical advice, diagnoses or prescriptions — please speak to a doctor. I can explain what your policy covers for a treatment, its waiting periods, or how a claim would work.",
+    hi: 'मैं चिकित्सा सलाह, निदान या दवा नहीं बता सकता — कृपया डॉक्टर से बात करें। मैं बता सकता हूँ कि आपकी पॉलिसी किसी इलाज को कैसे कवर करती है, उसकी प्रतीक्षा अवधि क्या है, या क्लेम कैसे होगा।',
+    te: 'నేను వైద్య సలహా, రోగ నిర్ధారణ లేదా మందులు సూచించలేను — దయచేసి డాక్టర్‌ను సంప్రదించండి. మీ పాలసీ ఒక చికిత్సను ఎలా కవర్ చేస్తుందో, వెయిటింగ్ పీరియడ్‌లు లేదా క్లెయిమ్ ఎలా పనిచేస్తుందో నేను వివరించగలను.',
+  },
+  noPolicy: {
+    en: "You don't have an active policy I can read yet. Once you buy a plan I can explain its benefits, exclusions and claims. For plan questions, compare plans in Explore cover.",
+    hi: 'अभी आपकी कोई सक्रिय पॉलिसी नहीं है जिसे मैं पढ़ सकूँ। प्लान खरीदने के बाद मैं उसके लाभ, अपवाद और क्लेम समझा सकता हूँ। प्लान की तुलना के लिए "कवर देखें" पर जाएँ।',
+    te: 'నేను చదవగలిగే యాక్టివ్ పాలసీ మీకు ఇంకా లేదు. ప్లాన్ కొన్న తర్వాత దాని ప్రయోజనాలు, మినహాయింపులు, క్లెయిమ్‌లను వివరిస్తాను. ప్లాన్‌లను పోల్చడానికి "కవర్ చూడండి"కి వెళ్ళండి.',
+  },
+  intro: {
+    hi: 'आपकी पॉलिसी के रिकॉर्ड के अनुसार (पॉलिसी का पाठ अंग्रेज़ी में दिखाया गया है, क्योंकि वही मान्य है):',
+    te: 'మీ పాలసీ రికార్డుల ప్రకారం (పాలసీ పదజాలం ఇంగ్లీష్‌లో చూపబడింది, ఎందుకంటే అదే చెల్లుబాటు అవుతుంది):',
+  },
+  escalate: {
+    en: 'This looks like something a person should handle. You can send it to our support team with one click — they will reply in your support tickets. A support ticket is not a formal grievance; for that use the Grievances page.',
+    hi: 'इसे किसी व्यक्ति को देखना चाहिए। आप एक क्लिक में इसे हमारी सहायता टीम को भेज सकते हैं — जवाब आपके सपोर्ट टिकट में मिलेगा। सपोर्ट टिकट औपचारिक शिकायत नहीं है; उसके लिए शिकायत पृष्ठ का उपयोग करें।',
+    te: 'దీనిని ఒక వ్యక్తి చూడాలి. ఒక క్లిక్‌తో మా సపోర్ట్ టీమ్‌కు పంపవచ్చు — సమాధానం మీ సపోర్ట్ టికెట్లలో వస్తుంది. సపోర్ట్ టికెట్ అధికారిక ఫిర్యాదు కాదు; దాని కోసం ఫిర్యాదుల పేజీని ఉపయోగించండి.',
+  },
+};
+const tr = (key, lang) => L10N[key][lang] || L10N[key].en;
 
 const URGENT = /\b(chest pain|can'?t breathe|cannot breathe|difficulty breathing|unconscious|not breathing|severe bleeding|heavy bleeding|stroke|seizure|overdose|suicid|kill myself|self[- ]harm|heart attack|poison)/i;
 const MEDICAL = /\b(should i (take|stop|start)|what (medicine|medication|dose|dosage)|diagnos|is it (cancer|serious)|treat(ment)? for my|cure for|prescri)/i;
@@ -30,7 +70,10 @@ export function buildEvidence(user, policyId) {
     const P = `P${i + 1}`;
     const s = p.termsSnapshot || {};
     const src = `${p.planName} (${p.policyNumber}), purchased version v${p.planVersion}`;
-    const add = (key, title, text) => ev.push({ id: `${P}-${key}`, policyId: p.id, policyNumber: p.policyNumber, source: src, title, text });
+    const add = (key, title, text) => ev.push({
+      id: `${P}-${key}`, policyId: p.id, policyNumber: p.policyNumber, source: src, title, text,
+      document: { type: CIS_SECTIONS[key]?.startsWith('CIS') ? 'Customer Information Sheet' : 'Policy schedule', section: CIS_SECTIONS[key] || 'Policy schedule', product: p.planName, uin: p.productUin || null, productVersion: p.planVersion, policyNumber: p.policyNumber, insurer: p.insurerName || null },
+    });
     add('summary', 'Policy summary', `${p.planName} ${p.product} policy ${p.policyNumber}. Status ${p.status}. Cover from ${p.startDate} to ${p.endDate}. Policyholder ${p.holderName}.`);
     if (p.product === 'health') {
       add('cover', 'Sum insured and balance', `Sum insured ${rupees(p.coverage)}${p.planType === 'floater' ? ' shared by all insured members (family floater)' : ''}. Available now ${rupees(p.balance?.available)}, reserved for open claims ${rupees(p.balance?.reserved)}, already settled ${rupees(p.balance?.paid)}.`);
@@ -51,11 +94,11 @@ export function buildEvidence(user, policyId) {
   const claims = db.find('healthClaims', (c) => c.userId === user.id);
   claims.forEach((c, i) => {
     ev.push({
-      id: `C${i + 1}`, policyId: c.policyId, source: `Claim ${c.claimNumber}`, title: `Claim ${c.claimNumber}`,
+      id: `C${i + 1}`, policyId: c.policyId, source: `Claim ${c.claimNumber}`, document: { type: 'Claim record', section: c.claimNumber, product: null, uin: null, productVersion: null }, title: `Claim ${c.claimNumber}`,
       text: `${c.type} claim ${c.claimNumber}, status ${c.status}, admitted ${c.admissionDate}, requested ${rupees(c.requestedAmount)}${c.assessment?.approvedAmount != null ? `, approved ${rupees(c.assessment.approvedAmount)}` : ''}${c.infoRequest?.items?.length ? `. Documents requested: ${list(c.infoRequest.items)}` : ''}.`,
     });
   });
-  ev.push({ id: 'G1', source: 'Vision Health Care service guide', title: 'How claims work', text: `Today is ${t}. Cashless: a network hospital requests pre-authorisation, which is provisional until the final bill is assessed. Reimbursement: pay the hospital, then claim with bills, prescriptions, reports and the discharge summary. A network listing never guarantees approval. In an emergency get care first; claims can be raised afterwards.` });
+  ev.push({ id: 'G1', document: { type: 'Service guide', section: 'How claims work', product: null, uin: null, productVersion: null }, source: 'Vision Health Care service guide', title: 'How claims work', text: `Today is ${t}. Cashless: a network hospital requests pre-authorisation, which is provisional until the final bill is assessed. Reimbursement: pay the hospital, then claim with bills, prescriptions, reports and the discharge summary. A network listing never guarantees approval. In an emergency get care first; claims can be raised afterwards.` });
   return ev;
 }
 
@@ -88,7 +131,7 @@ function ruleAnswer(question, ev) {
   }
   const top = picked.slice(0, 5);
   return {
-    answer: `Here's what your policy records say:\n\n${top.map((e) => `• ${e.title} (${e.source.split(',')[0]}): ${e.text} [${e.id}]`).join('\n')}\n\nThis is a summary of your purchased terms, not a coverage decision — claims are always assessed individually.`,
+    answer: `Here's what your policy records say:\n\n${top.map((e) => `• ${e.title} (${e.source.split(',')[0]}${e.document?.section ? ` · ${e.document.section}` : ''}): ${e.text} [${e.id}]`).join('\n')}\n\nThis is a summary of your purchased terms, not a coverage decision — claims are always assessed individually.`,
     citations: top.map((e) => e.id),
     abstained: false,
   };
@@ -107,9 +150,9 @@ Rules:
 - Keep answers under 180 words unless the user asks for detail. Use short paragraphs or bullets.`;
 
 let client;
-async function claudeAnswer(question, ev, history) {
+async function claudeAnswer(question, ev, history, lang = 'en') {
   client ||= new Anthropic();
-  const evidence = ev.map((e) => `<passage id="${e.id}" source="${e.source}" title="${e.title}">${e.text}</passage>`).join('\n');
+  const evidence = ev.map((e) => `<passage id="${e.id}" source="${e.source}" section="${e.document?.section || ''}" title="${e.title}">${e.text}</passage>`).join('\n');
   const prior = history.slice(-6).map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content).slice(0, 2000) }));
   const response = await client.beta.messages.create({
     model: AI_MODEL,
@@ -117,7 +160,7 @@ async function claudeAnswer(question, ev, history) {
     betas: ['server-side-fallback-2026-07-01'],
     fallbacks: 'default',
     output_config: { effort: 'low' },
-    system: SYSTEM,
+    system: `${SYSTEM}\n- The customer chose ${LANGUAGES[lang] || 'English'} as the reply language. Answer in that language, keeping policy amounts, clause names and citation ids exactly as written.\n- If the question is a complaint, dispute or a request for a person, say a human can help and that a support ticket is not a formal grievance.`,
     messages: [...prior, { role: 'user', content: `<evidence>\n${evidence}\n</evidence>\n\nQuestion: ${question}` }],
   });
   if (response.stop_reason === 'refusal') return null;
@@ -130,25 +173,28 @@ async function claudeAnswer(question, ev, history) {
   return { answer: clean, citations: cited, abstained: /couldn'?t confirm/i.test(clean) && cited.length === 0 };
 }
 
-export async function askAssistant(user, { question, policyId, history = [] }) {
+export async function askAssistant(user, { question, policyId, history = [], language = 'en' }) {
   const q = String(question || '').trim();
+  const lang = LANGUAGES[language] ? language : 'en';
   const urgent = URGENT.test(q);
   const medical = MEDICAL.test(q);
+  const complex = COMPLEX.test(q);
   const ev = buildEvidence(user, policyId);
-  const base = { urgent, mode: aiEnabled() ? 'claude' : 'offline', model: aiEnabled() ? AI_MODEL : null };
+  const base = { urgent, language: lang, mode: aiEnabled() ? 'claude' : 'offline', model: aiEnabled() ? AI_MODEL : null };
+  const escalation = (reason) => ({ suggested: true, reason, message: tr('escalate', lang) });
   if (urgent) {
-    return { ...base, answer: 'This sounds like it may be an emergency. Please call your local emergency number or go to the nearest hospital now — you do not need claim approval before urgent treatment. When you are safe, I can help you with the claim.', citations: [], evidence: [], abstained: false };
+    return { ...base, answer: tr('emergency', lang), emergency: { number: '112', label: 'National emergency number (India)' }, citations: [], evidence: [], abstained: false, refused: 'emergency' };
   }
   if (medical) {
-    return { ...base, answer: "I can't give medical advice, diagnoses or treatment recommendations — please speak to a doctor. I can explain what your policy covers for a treatment, its waiting periods, or how a claim would work.", citations: [], evidence: [], abstained: true };
+    return { ...base, answer: tr('medical', lang), citations: [], evidence: [], abstained: true, refused: 'medical_advice' };
   }
   if (!ev.some((e) => e.id.startsWith('P'))) {
-    return { ...base, answer: "You don't have an active policy I can read yet. Once you buy a plan I can explain its benefits, exclusions and claims. For plan questions, compare plans in Explore cover.", citations: [], evidence: [], abstained: true };
+    return { ...base, answer: tr('noPolicy', lang), citations: [], evidence: [], abstained: true, escalation: complex ? escalation('Needs a person') : undefined };
   }
   let out = null;
   if (aiEnabled()) {
     try {
-      out = await claudeAnswer(q, ev, history);
+      out = await claudeAnswer(q, ev, history, lang);
     } catch (e) {
       if (!(e instanceof Anthropic.APIError)) throw e;
       console.warn(`[ai] Claude unavailable (${e.status ?? 'network'}); using offline matcher`);
@@ -156,7 +202,14 @@ export async function askAssistant(user, { question, policyId, history = [] }) {
       base.notice = 'The AI service is temporarily unavailable, so this answer was built directly from your policy records.';
     }
   }
-  if (!out) { out = ruleAnswer(q, ev); base.mode = 'offline'; }
+  if (!out) {
+    out = ruleAnswer(q, ev);
+    base.mode = 'offline';
+    if (lang !== 'en' && !out.abstained) out.answer = `${tr('intro', lang)}\n\n${out.answer}`;
+  }
   const byId = Object.fromEntries(ev.map((e) => [e.id, e]));
-  return { ...base, ...out, evidence: out.citations.map((id) => byId[id]).filter(Boolean).map(({ id, title, source, text }) => ({ id, title, source, text })) };
+  const evidence = out.citations.map((id) => byId[id]).filter(Boolean).map(({ id, title, source, text, document }) => ({ id, title, source, text, document }));
+  const policyVersions = [...new Map(evidence.filter((e) => e.document?.policyNumber).map((e) => [e.document.policyNumber, { policyNumber: e.document.policyNumber, product: e.document.product, uin: e.document.uin, productVersion: e.document.productVersion }])).values()];
+  const needsHuman = complex || out.abstained;
+  return { ...base, ...out, evidence, policyVersions, escalation: needsHuman ? escalation(complex ? 'The question needs a person (complaint, dispute or a request for a human)' : 'The assistant could not confirm this from your policy') : undefined };
 }

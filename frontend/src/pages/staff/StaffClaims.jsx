@@ -7,27 +7,70 @@ import { Alert, Badge, Card, ErrorBox, Field, KV, Loading, PageHeader, Table, Ti
 import DocumentPanel from '../../components/DocumentPanel.jsx';
 import { AssessmentTable } from '../customer/Claims.jsx';
 import { NoteBox } from './StaffApplications.jsx';
+import { DocumentChecklist, FraudBanner, InsurerComms, ResponsibilityCard, SlaChip, TimelineSummary } from '../claimsops/components.jsx';
 
 // ---------------- health ----------------
 export function HealthClaimsQueue() {
   const res = useLoad(() => api.get('/health-claims'));
+  const intimations = useLoad(() => api.get('/claims-ops/intimations?status=Intimated'));
+  const [view, setView] = useState('open');
   const nav = useNavigate();
+  const FINAL = ['Settled', 'Rejected', 'Preauth Rejected'];
+  const rows = (res.data || []).filter((c) => view === 'all' || (view === 'open' ? !FINAL.includes(c.status) : ['at_risk', 'breached'].includes(c.sla?.state)));
   return (
     <>
-      <PageHeader title="Health claims workspace" />
+      <PageHeader title="Health claims workspace" actions={<><Link className="btn secondary sm" to="/ops/claims-sla">SLA board</Link><Link className="btn secondary sm" to="/ops/fraud-review">Fraud review</Link></>} />
+      {intimations.data?.length > 0 && (
+        <Card title={`Intimation queue (${intimations.data.length})`} actions={<Link to="/ops/intimations">Open queue</Link>}>
+          <Table rows={intimations.data.slice(0, 5)} onRowClick={() => nav('/ops/intimations')} columns={[
+            { key: 'intimationNumber', label: 'Intimation' }, { key: 'customerName', label: 'Customer' }, { key: 'hospitalName', label: 'Hospital' },
+            { key: 'expectedAdmissionDate', label: 'Expected admission', render: (i) => date(i.expectedAdmissionDate) },
+            { key: 'preferredType', label: 'Route', render: (i) => titleCase(i.preferredType) },
+          ]} />
+        </Card>
+      )}
       <Card>
+        <div className="tabs" role="tablist">
+          {[['open', 'Open'], ['sla', 'At risk / breached'], ['all', 'All']].map(([v, l]) => <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>{l}</button>)}
+        </div>
         {res.loading ? <Loading /> : (
-          <Table rows={res.data} empty="No claims." onRowClick={(c) => nav(`/ops/health-claims/${c.id}`)} columns={[
+          <Table rows={rows} empty="No claims." onRowClick={(c) => nav(`/ops/health-claims/${c.id}`)} columns={[
             { key: 'claimNumber', label: 'Claim' }, { key: 'type', label: 'Type', render: (c) => titleCase(c.type) },
             { key: 'policyNumber', label: 'Policy' }, { key: 'memberName', label: 'Patient' }, { key: 'hospitalName', label: 'Hospital' },
             { key: 'requestedAmount', label: 'Requested', num: true, render: (c) => money(c.requestedAmount) },
             { key: 'approvedAmount', label: 'Approved', num: true, render: (c) => money(c.approvedAmount) },
-            { key: 'status', label: 'Status', render: (c) => <Badge>{c.status}</Badge> },
+            { key: 'status', label: 'Status', render: (c) => <><Badge>{c.status}</Badge>{c.responsible && <div className="muted" style={{ fontSize: '.78rem' }}>{c.unifiedStatus} · {c.responsible}</div>}</> },
+            { key: 'sla', label: 'SLA', render: (c) => <SlaChip sla={c.sla} compact /> },
             { key: 'updatedAt', label: 'Updated', render: (c) => dateTime(c.updatedAt) },
           ]} />
         )}
       </Card>
     </>
+  );
+}
+
+function CommsForm({ claimId, onSaved }) {
+  const act = useAction();
+  const [f, setF] = useState({ direction: 'inbound', channel: 'Email (sandbox)', subject: '', message: '', insurerRef: '', visibleToCustomer: true });
+  const save = () => act.run(async () => {
+    await api.post(`/claims-ops/claims/${claimId}/insurer-comms`, f);
+    setF({ ...f, subject: '', message: '', insurerRef: '' });
+    onSaved();
+  }, 'Logged');
+  return (
+    <details style={{ marginTop: '.8rem' }}>
+      <summary>Log an insurer / TPA communication</summary>
+      <div className="form-grid" style={{ marginTop: '.6rem' }}>
+        <Field label="Direction"><select value={f.direction} onChange={(e) => setF({ ...f, direction: e.target.value })}><option value="inbound">From insurer/TPA</option><option value="outbound">To insurer/TPA</option></select></Field>
+        <Field label="Channel"><input value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })} /></Field>
+        <Field label="Insurer reference (optional)"><input value={f.insurerRef} onChange={(e) => setF({ ...f, insurerRef: e.target.value })} /></Field>
+        <Field label="Subject" className="full"><input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /></Field>
+        <Field label="Message" className="full"><textarea value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} /></Field>
+        <label className="check full"><input type="checkbox" checked={f.visibleToCustomer} onChange={(e) => setF({ ...f, visibleToCustomer: e.target.checked })} /> Visible to the customer</label>
+      </div>
+      <ErrorBox error={act.error} />
+      <div className="row" style={{ marginTop: '.5rem' }}><button className="btn sm" disabled={act.busy || !f.subject.trim()} onClick={save}>Save entry</button>{act.message && <span className="badge ok">{act.message}</span>}</div>
+    </details>
   );
 }
 
@@ -55,12 +98,31 @@ export function HealthClaimReview() {
   const billTotal = items.reduce((t, i) => t + (toPaise(i.amount) || 0), 0);
   const assessable = ['Submitted', 'Under Review', 'Final Bill Submitted'].includes(c.status);
   const final = ['Settled', 'Rejected', 'Preauth Rejected'].includes(c.status);
+  const ops = c.ops;
 
   return (
     <>
-      <PageHeader title={`Claim ${c.claimNumber}`} subtitle={`${titleCase(c.type)} · ${c.policy.policyNumber} (${c.policy.planName})`} actions={<Badge>{c.status}</Badge>} />
+      <PageHeader title={`Claim ${c.claimNumber}`} subtitle={`${titleCase(c.type)} · ${c.policy.policyNumber} (${c.policy.planName})${ops?.insurer.claimRef ? ` · ${ops.insurer.claimRef}` : ''}`} actions={<><Badge>{c.status}</Badge>{ops?.sla.primary && <SlaChip sla={ops.sla.primary} />}</>} />
       {act.message && <Alert kind="ok">{act.message}</Alert>}
       <ErrorBox error={act.error} />
+      {ops && <FraudBanner fraud={ops.fraud} claimId={c.id} />}
+      {ops && (
+        <div className="grid grid-2">
+          <Card title="Customer-facing status"><ResponsibilityCard ops={ops} /></Card>
+          <Card title={`Turnaround (SLA policy v${ops.sla.policyVersion ?? '—'})`}>
+            <div style={{ display: 'grid', gap: '.5rem' }}>
+              {ops.sla.clocks.map((k) => (
+                <div key={k.key} className="row between">
+                  <span>{k.label}<div className="muted" style={{ fontSize: '.78rem' }}>{k.startAt ? `Started ${dateTime(k.startAt)} · due ${dateTime(k.dueAt)}` : 'Not started'}{k.stopAt ? ` · stopped ${dateTime(k.stopAt)}` : ''}</div></span>
+                  <SlaChip sla={k} compact />
+                </div>
+              ))}
+            </div>
+            {ops.sla.breaches.length > 0 && <Alert kind="error">Breach recorded: {ops.sla.breaches.map((b) => `${b.label} (detected ${dateTime(b.detectedAt)})`).join('; ')}</Alert>}
+            <p className="co-disclaimer">{ops.sla.source}. Clocks pause while waiting on customer documents.</p>
+          </Card>
+        </div>
+      )}
       <div className="grid grid-2">
         <Card title="Claim">
           <KV items={[
@@ -144,6 +206,22 @@ export function HealthClaimReview() {
           </div>
         </Card>
       )}
+      {final && ops && ops.unified.status !== 'Closed' && (
+        <Card title="Close claim file">
+          <p className="muted">Closing marks the file complete for the customer (status “Closed”). Open grievances on the claim must be resolved first.</p>
+          <button className="btn secondary" disabled={act.busy} onClick={() => act.run(async () => { await api.post(`/claims-ops/claims/${c.id}/close`, { note: text || undefined }); res.reload(); }, 'Claim file closed')}>Close claim file</button>
+        </Card>
+      )}
+      {ops && (
+        <div className="grid grid-2">
+          <Card title="Document checklist & assistance"><DocumentChecklist intel={ops.documents} audience="staff" /></Card>
+          <Card title="Insurer / TPA communications">
+            <InsurerComms items={ops.insurerComms} />
+            <CommsForm claimId={c.id} onSaved={() => res.reload()} />
+          </Card>
+        </div>
+      )}
+      {ops && <TimelineSummary summary={ops.timelineSummary} />}
 
       <DocumentPanel entityType="healthClaim" entityId={c.id} title="Claim documents (bills, reports, discharge)" categories={['bill', 'prescription', 'medical_report', 'discharge_summary', 'other']} />
       <div className="grid grid-2">
@@ -153,6 +231,16 @@ export function HealthClaimReview() {
         </Card>
         <Card title="Timeline"><Timeline items={c.timeline} /></Card>
       </div>
+      {ops?.auditHistory && (
+        <Card title="Audit history">
+          <details><summary>{ops.auditHistory.length} audited action(s)</summary>
+            <Table rows={ops.auditHistory.map((a, i) => ({ ...a, id: i }))} columns={[
+              { key: 'at', label: 'When', render: (a) => dateTime(a.at) }, { key: 'action', label: 'Action', render: (a) => titleCase(a.action.toLowerCase()) },
+              { key: 'by', label: 'By', render: (a) => `${a.by} (${a.role})` },
+            ]} />
+          </details>
+        </Card>
+      )}
     </>
   );
 }

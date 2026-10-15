@@ -42,8 +42,12 @@ export function Reconciliation({ rec }) {
         <dt>Premiums applied to policies/installments</dt><dd>{money(rec.premiumsApplied)}</dd>
         <dt>Payouts completed</dt><dd>{money(rec.payoutsCompleted)}</dd>
         <dt>Claim amounts recorded as paid</dt><dd>{money(rec.claimAmountsPaid)}</dd>
+        {rec.awaitingIssuance && <><dt>Captured, awaiting insurer issuance</dt><dd>{rec.awaitingIssuance.length} · {money(rec.awaitingIssuanceAmount)}</dd></>}
+        {rec.declinedByInsurer && <><dt>Captured, declined by insurer (refund route)</dt><dd>{rec.declinedByInsurer.length} · {money(rec.declinedByInsurerAmount)}{rec.declinedAwaitingRefund ? ` · ${rec.declinedAwaitingRefund} refund(s) outstanding` : ''}</dd></>}
       </dl>
       {rec.paymentMismatches.length > 0 && <Alert kind="error">Mismatched payments: {rec.paymentMismatches.map((m) => m.reference).join(', ')}</Alert>}
+      {rec.awaitingIssuance?.length > 0 && <Alert kind="warn">Issuance pending (not a mismatch — the insurer has not decided yet): {rec.awaitingIssuance.map((m) => m.reference).join(', ')}</Alert>}
+      {rec.declinedAwaitingRefund > 0 && <Alert kind="warn">Insurer-declined proposals with refunds still outstanding: {rec.declinedByInsurer.filter((m) => m.refunded < m.amount).map((m) => m.reference).join(', ')}</Alert>}
     </Card>
   );
 }

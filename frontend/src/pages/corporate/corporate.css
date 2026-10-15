@@ -1,0 +1,49 @@
+/* Corporate module (employer portal, employee benefits). Reuses the global design tokens. */
+.corp-picker { display: inline-flex; flex-direction: column; font-size: .75rem; font-weight: 600; color: var(--muted); gap: .15rem; min-width: 0; }
+.corp-picker select { padding: .42rem .55rem; font-size: .9rem; max-width: 100%; }
+.corp-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: flex-end; justify-content: space-between; margin-bottom: 1rem; }
+.corp-toolbar .filters { flex: 1 1 auto; }
+.corp-sandbox { margin: 0 0 1rem; font-size: .85rem; color: var(--muted); display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.corp-suppressed { font-size: .8rem; color: var(--muted); font-style: italic; }
+.corp-back { display: inline-block; margin-bottom: .6rem; font-size: .9rem; }
+.corp-progress { height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; margin-top: .45rem; }
+.corp-progress > span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
+.corp-kpis { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 1rem; }
+.corp-kpis .stat .value { font-size: 1.45rem; }
+.corp-kpis .stat .sub { font-size: .78rem; color: var(--muted); margin-top: .15rem; }
+.corp-two { display: grid; gap: 1rem; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.corp-list { list-style: none; margin: 0; padding: 0; }
+.corp-list li { display: flex; justify-content: space-between; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.corp-list li:last-child { border-bottom: none; }
+.corp-list .meta { color: var(--muted); font-size: .84rem; }
+.corp-privacy { font-size: .84rem; color: var(--muted); background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: .55rem .75rem; margin: .5rem 0 0; }
+.corp-csv textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; min-height: 160px; width: 100%; }
+.corp-errors { max-height: 260px; overflow: auto; }
+.corp-pipeline { display: flex; flex-wrap: wrap; gap: .35rem; margin: .35rem 0 .75rem; padding: 0; list-style: none; }
+.corp-pipeline li { font-size: .78rem; padding: .2rem .6rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); background: var(--surface-2); }
+.corp-pipeline li.done { color: var(--ok); border-color: #bfe5cf; background: var(--ok-50); }
+.corp-pipeline li.current { color: #fff; background: var(--brand); border-color: var(--brand); font-weight: 600; }
+.corp-benefit { border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; background: var(--surface); }
+.corp-benefit + .corp-benefit { margin-top: .9rem; }
+.corp-benefit h4 { margin: 0 0 .25rem; }
+.corp-lives { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: .6rem 0; }
+.corp-life { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .55rem .7rem; background: var(--surface-2); font-size: .88rem; }
+.corp-life strong { display: block; }
+.corp-check { display: flex; gap: .55rem; align-items: flex-start; font-size: .9rem; font-weight: 500; }
+.corp-check input { margin-top: .2rem; width: auto; }
+.corp-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.corp-muted-row td { color: var(--muted); }
+@media (max-width: 1000px) { .corp-two { grid-template-columns: minmax(0, 1fr); } }
+.corp-two > * { min-width: 0; }
+.grid.grid-2.corp-grid { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+.grid.corp-grid > * { min-width: 0; }
+@media (max-width: 520px) {
+  .corp-kpis { grid-template-columns: 1fr 1fr; }
+  .corp-toolbar { align-items: stretch; }
+  .corp-picker, .corp-picker select { width: 100%; }
+  .corp-actions .btn { flex: 1 1 auto; }
+}
+.field.corp-inline { min-width: 170px; margin: 0; }
+.corp-form-h { margin: 1rem 0 .5rem; font-size: .95rem; color: var(--text-2); }
+.corp-form-h:first-of-type { margin-top: 0; }
+.corp-grid .kv dd, .corp-two .kv dd { overflow-wrap: anywhere; min-width: 0; }

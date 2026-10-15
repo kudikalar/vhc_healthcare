@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { db, tx } from '../db.js';
+import { now } from '../clock.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { bad, notFound } from '../utils/errors.js';
 import { audit } from '../services/audit.js';
+import { applyLegacyNetworkFlag } from '../services/networkCore.js';
 
 const r = Router();
 export const NETWORK_DISCLAIMER = 'Network membership enables cashless requests but does not by itself guarantee claim approval.';
@@ -10,7 +12,8 @@ export const NETWORK_DISCLAIMER = 'Network membership enables cashless requests 
 r.get('/', (req, res) => {
   const { q, city, postalCode, specialty, network, includeInactive } = req.query;
   const s = (v) => String(v || '').toLowerCase().trim();
-  const list = db.find('hospitals', (h) =>
+  // Candidate prospects (real chains under exploration) are admin-only and never listed here.
+  const list = db.find('hospitals', (h) => !h.candidate &&
     (includeInactive === 'true' || h.active) &&
     (!q || h.name.toLowerCase().includes(s(q))) &&
     (!city || h.city.toLowerCase().includes(s(city))) &&
@@ -22,7 +25,7 @@ r.get('/', (req, res) => {
 
 r.get('/:id', (req, res) => {
   const h = db.get('hospitals', req.params.id);
-  if (!h) throw notFound('Hospital not found');
+  if (!h || h.candidate) throw notFound('Hospital not found');
   res.json({ ...h, disclaimer: NETWORK_DISCLAIMER });
 });
 
@@ -38,8 +41,10 @@ function clean(b) {
 
 r.post('/', authenticate, requireRole('admin'), (req, res) => {
   const h = tx(() => {
-    const rec = db.insert('hospitals', clean(req.body || {}));
+    const rec = db.insert('hospitals', { ...clean(req.body || {}), providerType: 'hospital', candidate: false, publishable: true });
     audit(req.user, 'HOSPITAL_CREATED', 'hospital', rec.id, { name: rec.name });
+    // The boolean is mirrored into a sandbox-insurer network record (network module).
+    if (rec.network) applyLegacyNetworkFlag(rec, true, req.user);
     return rec;
   });
   res.status(201).json(h);
@@ -49,7 +54,17 @@ r.put('/:id', authenticate, requireRole('admin'), (req, res) => {
   const h = db.get('hospitals', req.params.id);
   if (!h) throw notFound('Hospital not found');
   tx(() => {
+    const wasNetwork = !!h.network;
     Object.assign(h, clean({ ...h, ...req.body }));
+    // Keep the provider-registry onboarding stage consistent with the legacy active switch.
+    const stage = h.onboarding?.stage;
+    const next = !h.active && stage === 'Active' ? 'Suspended' : h.active && stage === 'Suspended' ? 'Active' : null;
+    if (next && !h.candidate) {
+      h.onboarding.history.push({ at: now().toISOString(), from: stage, status: next, by: req.user.name, role: req.user.role, note: 'Changed via hospital editor' });
+      h.onboarding.stage = next;
+    }
+    if (h.candidate) h.active = false;
+    if (wasNetwork !== h.network || req.body?.network !== undefined) applyLegacyNetworkFlag(h, !!h.network, req.user);
     db.touch(h);
     audit(req.user, 'HOSPITAL_UPDATED', 'hospital', h.id, { active: h.active, network: h.network });
   });

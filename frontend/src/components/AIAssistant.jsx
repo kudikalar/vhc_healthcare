@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import Icon from './Icon.jsx';
+import { LANGUAGES, useLang } from '../pages/enterprise/i18n.jsx';
 
 // Vision AI: cited policy explainer (VHC-M30). Conversations live only in this browser tab's memory.
 const SUGGESTIONS = [
@@ -20,6 +21,27 @@ function useStatus() {
   return s;
 }
 
+function Feedback({ m }) {
+  const [state, setState] = useState(null);
+  const [ticket, setTicket] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (!m.interactionId) return null;
+  const rate = async (rating) => { setState(rating); try { await api.post('/ai/feedback', { interactionId: m.interactionId, rating }); } catch { setState(null); } };
+  const escalate = async () => {
+    setBusy(true);
+    try { setTicket((await api.post('/ai/escalate', { interactionId: m.interactionId })).ticket); } catch { /* shown as unchanged */ } finally { setBusy(false); }
+  };
+  return (
+    <div className="ai-feedback row" style={{ gap: '.4rem', marginTop: '.4rem', fontSize: '.8rem' }}>
+      <span className="muted">Was this helpful?</span>
+      <button type="button" className={`btn sm ${state === 'up' ? '' : 'ghost'}`} aria-pressed={state === 'up'} onClick={() => rate('up')} aria-label="Helpful">👍</button>
+      <button type="button" className={`btn sm ${state === 'down' ? '' : 'ghost'}`} aria-pressed={state === 'down'} onClick={() => rate('down')} aria-label="Not helpful">👎</button>
+      {ticket ? <Link to={`/support/tickets/${ticket.id}`}>Sent to support as {ticket.reference} →</Link>
+        : <button type="button" className="btn sm secondary" disabled={busy} onClick={escalate}>Ask a person</button>}
+    </div>
+  );
+}
+
 function Answer({ m }) {
   const [open, setOpen] = useState(false);
   const parts = m.content.split(/(\[[A-Z]\d+(?:-[a-z]+)?\])/g);
@@ -32,6 +54,8 @@ function Answer({ m }) {
         })}
       </div>
       {m.notice && <div className="ai-notice">{m.notice}</div>}
+      {m.urgent && <a className="btn sm danger" href="tel:112" style={{ marginTop: '.4rem' }}>Call 112 now</a>}
+      {m.escalation?.suggested && <div className="ai-notice">{m.escalation.message}</div>}
       {m.evidence?.length > 0 && (
         <div className="ai-sources">
           <span className="muted">Sources</span>
@@ -41,18 +65,24 @@ function Answer({ m }) {
           {open && m.evidence.find((e) => e.id === open) && (
             <blockquote className="ai-quote">
               <strong>{m.evidence.find((e) => e.id === open).source}</strong>
+              {m.evidence.find((e) => e.id === open).document?.section && <small className="muted" style={{ display: 'block' }}>{m.evidence.find((e) => e.id === open).document.section}{m.evidence.find((e) => e.id === open).document.uin ? ` · UIN ${m.evidence.find((e) => e.id === open).document.uin}` : ''}{m.evidence.find((e) => e.id === open).document.productVersion ? ` · product version v${m.evidence.find((e) => e.id === open).document.productVersion}` : ''}</small>}
               {m.evidence.find((e) => e.id === open).text}
             </blockquote>
           )}
         </div>
       )}
-      {m.abstained && <Link className="ai-escalate" to="/support">Talk to support instead →</Link>}
+      {m.policyVersions?.length > 0 && <div className="muted" style={{ fontSize: '.78rem', marginTop: '.3rem' }}>Based on: {m.policyVersions.map((v) => `${v.product} (${v.policyNumber}, v${v.productVersion})`).join('; ')}</div>}
+      {m.abstained && !m.interactionId && <Link className="ai-escalate" to="/support">Talk to support instead →</Link>}
+      <Feedback m={m} />
     </div>
   );
 }
 
 export function AssistantChat({ compact = false, policyId: fixedPolicy }) {
   const status = useStatus();
+  const { lang: uiLang } = useLang();
+  const [language, setLanguage] = useState(uiLang);
+  useEffect(() => { setLanguage(uiLang); }, [uiLang]);
   const [policies, setPolicies] = useState([]);
   const [policyId, setPolicyId] = useState(fixedPolicy || '');
   const [msgs, setMsgs] = useState([]);
@@ -72,8 +102,8 @@ export function AssistantChat({ compact = false, policyId: fixedPolicy }) {
     setQ('');
     setBusy(true);
     try {
-      const r = await api.post('/ai/ask', { question, policyId: policyId || undefined, history });
-      setMsgs((x) => [...x, { role: 'assistant', content: r.answer, evidence: r.evidence, abstained: r.abstained, urgent: r.urgent, notice: r.notice, mode: r.mode }]);
+      const r = await api.post('/ai/ask', { question, policyId: policyId || undefined, history, language });
+      setMsgs((x) => [...x, { role: 'assistant', content: r.answer, evidence: r.evidence, abstained: r.abstained, urgent: r.urgent, notice: r.notice, mode: r.mode, escalation: r.escalation, interactionId: r.interactionId, policyVersions: r.policyVersions }]);
     } catch (e) {
       setMsgs((x) => [...x, { role: 'assistant', content: e.message || 'Something went wrong. Please try again.', abstained: true }]);
     } finally {
@@ -88,6 +118,9 @@ export function AssistantChat({ compact = false, policyId: fixedPolicy }) {
         <span className={`ai-engine ${status?.engine === 'claude' ? 'live' : ''}`} title={status?.model || 'Answers built directly from your policy records'}>
           <span className="pulse" /> {status?.engine === 'claude' ? 'Claude AI' : 'Policy records mode'}
         </span>
+        <select value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Answer language">
+          {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+        </select>
         {!fixedPolicy && policies.length > 1 && (
           <select value={policyId} onChange={(e) => setPolicyId(e.target.value)} aria-label="Policy to ask about">
             <option value="">All my policies</option>
@@ -115,7 +148,7 @@ export function AssistantChat({ compact = false, policyId: fixedPolicy }) {
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }} />
         <button className="btn" disabled={busy || !q.trim()} aria-label="Send">Ask</button>
       </form>
-      <p className="ai-foot">AI answers can be wrong. Your policy document is the authority. In an emergency, get care first.</p>
+      <p className="ai-foot">AI answers can be wrong. Your policy document (in English) is the authority. Vision AI never diagnoses or prescribes. In an emergency call 112.</p>
     </div>
   );
 }

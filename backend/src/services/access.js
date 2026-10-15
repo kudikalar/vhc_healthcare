@@ -32,11 +32,21 @@ export function assertLifeClaimAccess(user, claim) {
   throw notFound('Claim not found');
 }
 
+/** VHC grievances: the customer who raised it, the grievance-handling staff, and read-only oversight roles. */
+export const GRIEVANCE_READ_ROLES = ['claims_officer', 'admin', 'support_manager', 'support_agent', 'compliance_officer', 'auditor'];
+export function assertGrievanceAccess(user, g) {
+  if (!g) throw notFound('Grievance not found');
+  if (user.role === 'customer' && g.userId === user.id) return g;
+  if (GRIEVANCE_READ_ROLES.includes(user.role)) return g;
+  throw notFound('Grievance not found');
+}
+
 const ENTITY = {
   application: ['applications', assertApplicationAccess],
   policy: ['policies', assertPolicyAccess],
   healthClaim: ['healthClaims', assertHealthClaimAccess],
   lifeClaim: ['lifeClaims', assertLifeClaimAccess],
+  grievance: ['grievances', assertGrievanceAccess],
 };
 
 /** Returns the entity if the user may attach/view documents on it. */

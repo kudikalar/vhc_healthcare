@@ -1,3 +1,4 @@
+import { cashlessStatus } from '../services/networkCore.js';
 import { Router } from 'express';
 import { db, nextSeq, tx } from '../db.js';
 import { now, today } from '../clock.js';
@@ -10,6 +11,12 @@ import { transition } from '../services/lifecycle.js';
 import { available, evaluateHealthClaim } from '../services/settlement.js';
 import { audit, notify } from '../services/audit.js';
 import { bucketFilter } from '../services/buckets.js';
+import {
+  claimOpsView, intimationForClaim, onClaimDecided, onClaimSubmitted, onDocumentsProvided, onDocumentsRequested,
+  onFinalBill, onPreauthDecided, reconcileSettledClaims, unifiedStatus,
+} from '../services/claimsOps.js';
+import { claimClocks, primaryClock } from '../services/claimsOpsSla.js';
+import { runFraudRules } from '../services/claimsOpsFraud.js';
 
 const r = Router();
 r.use(authenticate);
@@ -24,8 +31,12 @@ function view(claim, user) {
   const v = structuredClone(claim);
   v.policy = { id: policy.id, policyNumber: policy.policyNumber, planName: policy.planName, planType: policy.planType, startDate: policy.startDate, endDate: policy.endDate, coverage: policy.coverage, available: available(policy), reserved: policy.balance.reserved, paid: policy.balance.paid };
   v.member = policy.members.find((m) => m.id === claim.memberId);
-  if (user.role === 'customer') delete v.internalNotes;
+  if (user.role === 'customer') {
+    delete v.internalNotes;
+    v.insurerComms = (v.insurerComms || []).filter((m) => m.visibleToCustomer !== false);
+  }
   v.payouts = db.find('payouts', (p) => p.claimId === claim.id);
+  v.ops = claimOpsView(claim, user); // unified status, responsibility, SLA clocks, settlement, documents, flags (staff)
   return v;
 }
 
@@ -41,14 +52,25 @@ r.get('/', (req, res) => {
   let list = req.user.role === 'customer' ? db.find('healthClaims', (c) => c.userId === req.user.id)
     : ['claims_officer', 'admin'].includes(req.user.role) ? db.all('healthClaims') : [];
   list = list.filter((c) => (!status || c.status === status) && (!type || c.type === type)).filter(bucketFilter('claims', req.query.bucket));
-  res.json([...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((c) => ({
-    id: c.id, claimNumber: c.claimNumber, type: c.type, status: c.status, policyNumber: c.policyNumber, memberName: c.memberName,
-    hospitalName: c.hospitalName, admissionDate: c.admissionDate, requestedAmount: c.requestedAmount,
-    approvedAmount: c.assessment?.approvedAmount ?? null, createdAt: c.createdAt, updatedAt: c.updatedAt,
-  })));
+  res.json([...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((c) => {
+    const u = unifiedStatus(c);
+    const sla = primaryClock(claimClocks(c).filter((k) => k.running));
+    return {
+      id: c.id, claimNumber: c.claimNumber, type: c.type, status: c.status, policyNumber: c.policyNumber, memberName: c.memberName,
+      hospitalName: c.hospitalName, admissionDate: c.admissionDate, requestedAmount: c.requestedAmount,
+      approvedAmount: c.assessment?.approvedAmount ?? null, createdAt: c.createdAt, updatedAt: c.updatedAt,
+      unifiedStatus: u.status, responsible: u.responsible, insurerClaimRef: c.insurerClaimRef || null,
+      sla: sla ? { key: sla.key, label: sla.label, state: sla.state, dueAt: sla.dueAt, remainingMs: sla.remainingMs } : null,
+    };
+  }));
 });
 
-r.get('/:id', (req, res) => res.json(view(load(req), req.user)));
+r.get('/:id', (req, res) => {
+  const c = load(req);
+  // Settlement completes in the payout rail; make sure CLAIM_SETTLED is recorded before showing the claim.
+  if (c.status === 'Settled') tx(() => reconcileSettledClaims());
+  res.json(view(c, req.user));
+});
 
 r.post('/', requireRole('customer'), (req, res) => {
   const b = req.body || {};
@@ -67,7 +89,9 @@ r.post('/', requireRole('customer'), (req, res) => {
   assertPaise(b.requestedAmount, 'requestedAmount');
   let hospital = b.hospitalId ? db.get('hospitals', b.hospitalId) : null;
   if (b.type === 'cashless') {
-    if (!hospital || !hospital.active || !hospital.network) throw unprocessable('Cashless claims are available only at active network hospitals. You can still file a reimbursement claim.');
+    // Cashless eligibility is recorded per insurer × hospital × product × date (network module), not by a general tie-up.
+    const net = hospital && cashlessStatus({ hospitalId: hospital.id, insurerId: policy.insurerId, planId: policy.planId, service: 'inpatient', date: b.admissionDate });
+    if (!hospital || !hospital.active || !net?.eligible) throw unprocessable(`Cashless is not available at this hospital for your plan on the admission date (${net?.text || 'not a network hospital'}). You can still file a reimbursement claim.`);
   } else {
     if (!hospital && !b.hospitalName?.trim()) throw bad('Hospital is required');
     if (b.admissionDate > today()) throw bad('Reimbursement claims are for treatment that has already taken place');
@@ -81,6 +105,7 @@ r.post('/', requireRole('customer'), (req, res) => {
   const payoutDetails = b.type === 'reimbursement' ? validatePayoutDetails(b.payoutDetails) : null;
   const dup = db.findOne('healthClaims', (c) => c.policyId === policy.id && c.memberId === member.id && c.admissionDate === b.admissionDate && c.type === b.type && !FINAL.includes(c.status));
   if (dup) throw conflict(`A ${b.type} claim (${dup.claimNumber}) already exists for this admission`);
+  const intimation = intimationForClaim(req.user, b.intimationId, b);
 
   const claim = tx(() => {
     const c = db.insert('healthClaims', {
@@ -94,7 +119,9 @@ r.post('/', requireRole('customer'), (req, res) => {
       reservedAmount: 0, paidAmount: 0, documentRequests: [], internalNotes: [], timeline: [],
     });
     c.timeline.push({ at: now().toISOString(), status: c.status, by: req.user.name, role: 'customer', note: b.type === 'cashless' ? 'Pre-authorisation requested' : 'Reimbursement claim submitted' });
-    audit(req.user, 'HEALTH_CLAIM_SUBMITTED', 'healthClaim', c.id, { claimNumber: c.claimNumber, type: c.type, requested: c.requestedAmount });
+    onClaimSubmitted(c, req.user, intimation); // insurer ref, TPA, SLA version, CLAIM_INTIMATED / PREAUTH_REQUESTED events
+    runFraudRules(c, 'submission'); // review signals only — never blocks the claim
+    audit(req.user, 'HEALTH_CLAIM_SUBMITTED', 'healthClaim', c.id, { claimNumber: c.claimNumber, type: c.type, requested: c.requestedAmount, intimationId: intimation?.id || null });
     notify(req.user.id, 'Claim received', `Claim ${c.claimNumber} has been registered.`, { link: `/claims/${c.id}` });
     return c;
   });
@@ -110,6 +137,7 @@ r.post('/:id/request-documents', officer, (req, res) => {
     if (c.status !== 'Documents Requested') c.resumeStatus = c.status;
     c.documentRequests.push({ note, at: now().toISOString(), by: req.user.name, resolved: false });
     transition(c, 'Documents Requested', req.user, note);
+    onDocumentsRequested(c, req.user, note);
     audit(req.user, 'CLAIM_DOCUMENTS_REQUESTED', 'healthClaim', c.id, { note });
     notify(c.userId, 'Documents needed for your claim', `${c.claimNumber}: ${note}`, { type: 'warning', link: `/claims/${c.id}` });
   });
@@ -122,6 +150,7 @@ r.post('/:id/respond', requireRole('customer'), (req, res) => {
   tx(() => {
     c.documentRequests.forEach((d) => { d.resolved = true; });
     transition(c, c.resumeStatus || 'Submitted', req.user, req.body?.note || 'Requested documents provided');
+    onDocumentsProvided(c); // restarts the settlement clock from the last necessary document
   });
   res.json(view(c, req.user));
 });
@@ -142,7 +171,8 @@ r.post('/:id/preauth', officer, (req, res) => {
     if (decision === 'approve') {
       assertPaise(amount, 'amount');
       const hospital = db.get('hospitals', c.hospitalId);
-      if (!hospital?.active || !hospital.network) throw unprocessable('Hospital is no longer an active network hospital');
+      const net = hospital && cashlessStatus({ hospitalId: hospital.id, insurerId: policy.insurerId, planId: policy.planId, service: 'inpatient', date: c.admissionDate });
+      if (!hospital?.active || !net?.eligible) throw unprocessable(`Hospital is not cashless-eligible for this plan on the admission date (${net?.text || 'not in network'})`);
       if (amount > available(policy)) throw unprocessable(`Pre-authorisation exceeds the remaining coverage (${available(policy)} paise)`);
       policy.balance.reserved += amount;
       c.reservedAmount = amount;
@@ -153,6 +183,7 @@ r.post('/:id/preauth', officer, (req, res) => {
       c.preauth = { status: 'rejected', by: req.user.name, at: now().toISOString(), reason };
       transition(c, 'Preauth Rejected', req.user, `${reason}. You may still submit a reimbursement claim after treatment.`);
     } else throw bad('decision must be approve or reject');
+    onPreauthDecided(c, req.user, decision);
     audit(req.user, `PREAUTH_${decision.toUpperCase()}`, 'healthClaim', c.id, { amount, reason });
     notify(c.userId, `Pre-authorisation ${decision === 'approve' ? 'approved' : 'refused'}`, `${c.claimNumber}: ${decision === 'approve' ? 'provisional approval granted (final amount decided after the final bill)' : `${reason}. A reimbursement claim is still possible.`}`, { link: `/claims/${c.id}` });
   });
@@ -170,6 +201,8 @@ r.post('/:id/final-bill', requireRole('customer', 'claims_officer', 'admin'), (r
     c.requestedAmount = finalAmount;
     if (dischargeDate) c.dischargeDate = dischargeDate;
     transition(c, 'Final Bill Submitted', req.user, 'Final hospital bill submitted for review');
+    onFinalBill(c, req.user); // starts the final-authorisation clock
+    runFraudRules(c, 'final_bill');
   });
   res.json(view(c, req.user));
 });
@@ -223,6 +256,7 @@ r.post('/:id/approve', officer, (req, res) => {
     c.reservedAmount = a.approvedAmount;
     c.assessment = { ...a, by: req.user.name, approvedBy: req.user.name, approvedAt: now().toISOString() };
     transition(c, 'Approved', req.user, `Approved ${a.approvedAmount} paise (requested ${a.requestedAmount}, deducted ${a.totalDeducted})`);
+    onClaimDecided(c, req.user, 'approve');
     audit(req.user, 'HEALTH_CLAIM_APPROVED', 'healthClaim', c.id, { approved: a.approvedAmount, eligible: a.eligibleAmount, deductible: a.deductible, copay: a.copay });
     notify(c.userId, 'Claim approved', `${c.claimNumber} approved. Settlement will follow shortly.`, { type: 'success', link: `/claims/${c.id}` });
   });
@@ -241,6 +275,7 @@ r.post('/:id/reject', officer, (req, res) => {
     c.reservedAmount = 0;
     c.rejection = { reason, by: req.user.name, at: now().toISOString() };
     transition(c, 'Rejected', req.user, reason);
+    onClaimDecided(c, req.user, 'reject');
     audit(req.user, 'HEALTH_CLAIM_REJECTED', 'healthClaim', c.id, { reason });
     notify(c.userId, 'Claim rejected', `${c.claimNumber}: ${reason}`, { type: 'error', link: `/claims/${c.id}` });
   });

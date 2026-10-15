@@ -1,0 +1,90 @@
+/* Claims operations module: status stepper, SLA chips/timers, responsibility card, grievance thread. */
+
+/* ---- unified status stepper ---- */
+.co-stepper { list-style: none; display: flex; gap: 0; padding: 0; margin: 0 0 .9rem; overflow-x: auto; scrollbar-width: thin; }
+.co-stepper li { flex: 1 1 0; min-width: 92px; position: relative; text-align: center; font-size: .8rem; color: var(--muted); padding-top: 1.7rem; }
+.co-stepper li::before { content: ''; position: absolute; top: .55rem; left: 0; right: 0; height: 3px; background: var(--border); }
+.co-stepper li:first-child::before { left: 50%; }
+.co-stepper li:last-child::before { right: 50%; }
+.co-stepper li .dot { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 1.3rem; height: 1.3rem; border-radius: 50%; background: var(--surface); border: 2px solid var(--border-strong); display: grid; place-items: center; font-size: .7rem; font-weight: 700; z-index: 1; }
+.co-stepper li.done { color: var(--ok); }
+.co-stepper li.done::before { background: var(--ok); }
+.co-stepper li.done .dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.co-stepper li.current { color: var(--brand-600); font-weight: 700; }
+.co-stepper li.current .dot { border-color: var(--brand); background: var(--brand-50); box-shadow: var(--focus); }
+.co-stepper li.waiting { color: var(--warn); font-weight: 700; }
+.co-stepper li.waiting .dot { border-color: var(--warn); background: var(--warn-50); }
+.co-stepper li.stopped { color: var(--danger); font-weight: 700; }
+.co-stepper li.stopped .dot { border-color: var(--danger); background: var(--danger); color: #fff; }
+
+/* ---- responsibility / next action ---- */
+.co-next { display: grid; grid-template-columns: auto 1fr; gap: .4rem 1rem; align-items: start; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .8rem 1rem; }
+.co-next .who { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.co-next .org { font-weight: 700; color: var(--navy); }
+.co-next .action { grid-column: 1 / -1; }
+.co-disclaimer { font-size: .82rem; color: var(--muted); margin: .6rem 0 0; }
+
+/* ---- SLA chip & timer ---- */
+.co-sla { display: inline-flex; align-items: center; gap: .35rem; font-size: .76rem; font-weight: 600; padding: .14rem .55rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.co-sla.running, .co-sla.met { background: var(--ok-50); color: var(--ok); border-color: #bfe5cf; }
+.co-sla.at_risk, .co-sla.paused { background: var(--warn-50); color: var(--warn); border-color: #f2dca6; }
+.co-sla.breached, .co-sla.breached_closed { background: var(--danger-50); color: var(--danger); border-color: #f6cfcb; }
+.co-timer { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1rem; }
+.co-timer .big { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--navy); }
+.co-timer.at_risk .big { color: var(--warn); }
+.co-timer.breached .big { color: var(--danger); }
+.co-bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; margin-top: .5rem; }
+.co-bar > span { display: block; height: 100%; background: var(--ok); }
+.co-bar.at_risk > span, .co-bar.paused > span { background: #d99a00; }
+.co-bar.breached > span, .co-bar.breached_closed > span { background: var(--danger); }
+
+/* ---- settlement breakdown ---- */
+.co-settle td.num { white-space: nowrap; }
+.co-settle tr.payable td { font-weight: 700; color: var(--navy); border-top: 2px solid var(--border-strong); }
+.co-settle .sub td { font-size: .82rem; color: var(--muted); padding-left: 1.4rem; }
+
+/* ---- lists ---- */
+.co-checklist { list-style: none; padding: 0; margin: 0; display: grid; gap: .45rem; }
+.co-checklist li { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: start; padding: .55rem .7rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.co-checklist li .hint { display: block; font-size: .8rem; color: var(--muted); }
+.co-checklist .mark { width: 1.3rem; height: 1.3rem; border-radius: 50%; display: grid; place-items: center; font-size: .75rem; font-weight: 700; background: var(--surface-2); border: 1px solid var(--border-strong); }
+.co-checklist .received .mark { background: var(--ok); border-color: var(--ok); color: #fff; }
+.co-checklist .missing .mark, .co-checklist .requested .mark { background: var(--warn-50); border-color: #d99a00; color: var(--warn); }
+.co-comms { list-style: none; padding: 0; margin: 0; display: grid; gap: .55rem; }
+.co-comms li { border-left: 3px solid var(--border-strong); padding: .2rem 0 .2rem .7rem; }
+.co-comms li.inbound { border-left-color: var(--accent); }
+.co-comms li.outbound { border-left-color: var(--brand); }
+.co-comms .meta { font-size: .78rem; color: var(--muted); }
+
+/* ---- grievance thread ---- */
+.co-thread { display: grid; gap: .7rem; margin-bottom: .9rem; }
+.co-msg { max-width: 85%; padding: .6rem .8rem; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
+.co-msg.customer { justify-self: end; background: var(--brand-50); border-color: var(--brand-100); }
+.co-msg.internal { background: var(--warn-50); border-color: #f2dca6; border-style: dashed; }
+.co-msg .meta { font-size: .75rem; color: var(--muted); margin-bottom: .2rem; }
+.co-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.co-guidance { border: 1px solid var(--info-50); background: var(--info-50); color: var(--text); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: 1rem; }
+.co-guidance h3 { color: var(--info); font-size: 1rem; }
+.co-guidance ol { margin: .4rem 0 0 1.2rem; padding: 0; }
+.co-guidance li { margin-bottom: .35rem; }
+
+/* ---- fraud banner ---- */
+.co-flag-banner { border: 1px solid #f2dca6; background: var(--warn-50); color: var(--warn); border-radius: var(--radius-sm); padding: .75rem .95rem; margin-bottom: 1rem; }
+.co-flag-banner strong { color: #6b4000; }
+.co-flag-banner ul { margin: .35rem 0 0 1.1rem; padding: 0; }
+.co-evidence { font-size: .8rem; margin: .3rem 0 0; padding: .4rem .6rem; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; }
+.co-evidence dt { font-weight: 600; color: var(--muted); }
+.co-evidence dd { margin: 0 0 .2rem; overflow-wrap: anywhere; }
+
+/* ---- filters ---- */
+.co-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .6rem; align-items: end; margin-bottom: .9rem; }
+.co-filters .field { margin: 0; }
+.co-summary { font-size: .92rem; line-height: 1.55; margin: 0; }
+
+@media (max-width: 640px) {
+  .co-stepper li { min-width: 76px; font-size: .72rem; }
+  .co-msg { max-width: 100%; }
+  .co-timer .big { font-size: 1.45rem; }
+  .co-checklist li { grid-template-columns: auto 1fr; }
+  .co-checklist li > :last-child { grid-column: 2; }
+}

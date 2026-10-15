@@ -9,6 +9,7 @@ import Icon from '../../components/Icon.jsx';
 import { NomineeEditor, blankNominee } from '../../components/Editors.jsx';
 import DocumentPanel from '../../components/DocumentPanel.jsx';
 import PayButton from '../../components/PayButton.jsx';
+import { DocLinks, SandboxTag } from '../partners/common.jsx';
 
 const CLOSED_APPS = ['Issued', 'Rejected', 'Offer Declined'];
 const NEXT_STEP = {
@@ -24,11 +25,12 @@ const NEXT_STEP = {
 export function Policies() {
   const [params] = useSearchParams();
   const bucket = params.get('bucket') || '';
-  const res = useLoad(() => Promise.all([api.get(`/policies${bucket ? `?bucket=${bucket}` : ''}`), api.get('/applications')]), [bucket]);
+  const res = useLoad(() => Promise.all([api.get(`/policies${bucket ? `?bucket=${bucket}` : ''}`), api.get('/applications'), api.get('/partners/wallet').catch(() => null)]), [bucket]);
   const [filter, setFilter] = useState('all');
   if (res.loading) return <><PageHeader title="My policies" /><Loading /></>;
   if (res.error) return <><PageHeader title="My policies" /><ErrorBox error={res.error} /><button className="btn" onClick={res.reload}>Try again</button></>;
-  const [policies, apps] = res.data;
+  const [policies, apps, wallet] = res.data;
+  const walletById = Object.fromEntries((wallet?.policies || []).map((w) => [w.policyId, w]));
   const inProgress = apps.filter((a) => !CLOSED_APPS.includes(a.status));
   const shown = policies.filter((p) => filter === 'all' || p.product === filter);
 
@@ -37,6 +39,14 @@ export function Policies() {
       <PageHeader title="My policies" subtitle="Your issued cover, who it protects, and applications on their way to becoming policies."
         actions={<><Link className="btn secondary" to="/family">Add family member</Link><Link className="btn" to="/quote">Buy a new policy</Link></>} />
       <BucketFilterNote bucket={bucket} path="/policies" />
+      {wallet && wallet.activeSumInsured.perPolicy.length > 0 && (
+        <Card title="Total active health sum insured" actions={<span className="badge info">{money(wallet.activeSumInsured.total)}</span>}>
+          <p className="muted" style={{ marginTop: 0 }}>{wallet.activeSumInsured.qualifier}</p>
+          <ul className="checklist">
+            {wallet.activeSumInsured.perPolicy.map((x) => <li key={x.policyNumber}><span><strong>{x.policyNumber}</strong> — {money(x.sumInsured)} {x.members > 1 ? `shared by ${x.members} members${x.sharedFloater ? ' (family floater)' : ''}` : 'for one person'}</span></li>)}
+          </ul>
+        </Card>
+      )}
 
       {inProgress.length > 0 && (
         <>
@@ -74,20 +84,22 @@ export function Policies() {
         </Card>
       ) : (
         <div className="policy-grid">
-          {shown.map((p) => <PolicyTile key={p.id} p={p} />)}
+          {shown.map((p) => <PolicyTile key={p.id} p={p} w={walletById[p.id]} />)}
         </div>
       )}
     </>
   );
 }
 
-function PolicyTile({ p }) {
+function PolicyTile({ p, w }) {
   const people = p.product === 'health' ? (p.members || []).map((m) => m.fullName) : [p.lifeAssured?.fullName].filter(Boolean);
   return (
     <Link to={`/policies/${p.id}`} className={`policy-tile ${p.product}`}>
       <div className="row between"><span className={`chip ${p.product === 'life' ? 'life' : ''}`}>{p.product === 'health' ? `Health · ${titleCase(p.planType)}` : 'Term life'}</span><Badge kind={p.status === 'Active' ? 'ok' : ['Grace Period', 'Upcoming'].includes(p.status) ? 'warn' : p.status === 'Lapsed' ? 'error' : undefined}>{p.status}</Badge></div>
       <h3>{p.planName}</h3>
       <small className="muted">{p.policyNumber} · {date(p.startDate)} – {date(p.endDate)}</small>
+      <small className="muted" style={{ display: 'block' }}>{w?.insurer?.name || p.insurerName}{(w?.uin || p.productUin) && ` · UIN ${w?.uin || p.productUin}`} {(w?.sandbox ?? p.sandbox) && <SandboxTag>Sandbox</SandboxTag>}</small>
+      {w?.renewal && ['due', 'grace', 'ended'].includes(w.renewal.state) && <Badge kind={w.renewal.state === 'due' ? 'warn' : 'error'}>{w.renewal.label}</Badge>}
       <div className="tile-amt">{money(p.product === 'health' ? p.coverage : p.sumAssured)}<small>{p.product === 'health' ? (p.planType === 'floater' ? ' shared sum insured' : ' sum insured') : ' life cover'}</small></div>
       {p.product === 'health' && p.balance && (
         <div className="stacked-meter" title={`${money(p.balance.available)} available`}>
@@ -150,6 +162,7 @@ export function PolicyDetail() {
               p.terminatedOn && ['Terminated', `${date(p.terminatedOn)} — ${p.terminationReason}`],
             ]} />
           </Card>
+          <WalletCard id={p.id} isOwner={isOwner} />
           {p.product === 'health' ? (
             <>
               <Card title="Benefit balance">
@@ -337,6 +350,40 @@ function TermsSnapshot({ p }) {
           ['Maturity benefit', 'None (term plan)'], ['Exclusions', c.exclusions.join('; ')],
         ]} />
       )}
+    </Card>
+  );
+}
+
+/** Policy wallet: insurer identity, documents, claims contacts, renewal indicator and servicing actions. */
+function WalletCard({ id, isOwner }) {
+  const res = useLoad(() => api.get(`/partners/wallet/policies/${id}`), [id]);
+  if (res.loading) return <Card title="Policy wallet"><Loading /></Card>;
+  if (res.error) return <Card title="Policy wallet"><ErrorBox error={res.error} /></Card>;
+  const w = res.data;
+  const r = w.renewal;
+  return (
+    <Card title="Policy wallet" actions={w.sandbox && <SandboxTag />}>
+      {r && ['due', 'grace', 'ended'].includes(r.state) && <Alert kind={r.state === 'due' ? 'warn' : 'error'}>{r.label}</Alert>}
+      <KV items={[
+        ['Insurer', w.insurer?.name], ['UIN', <code key="u">{w.uin || 'n/a'}</code>], ['Terms version', `${w.planVersion}${w.currentPlanVersion && w.currentPlanVersion !== w.planVersion ? ` (current product version ${w.currentPlanVersion})` : ''}`],
+        w.insurerPolicyReference && ['Insurer reference', w.insurerPolicyReference],
+        ['Covered', w.coveredMembers.map((m) => `${m.fullName} (${m.relationship})`).join(', ')],
+        ['Sum insured', `${money(w.sumInsured)}${w.coveredMembers.length > 1 ? ' — shared by all members' : ''}`],
+        ['Effective', `${date(w.effectiveDate)} – ${date(w.endDate)}`], ['Renewal date', date(w.renewalDate)],
+        ['Premium', `${money(w.premium.annual)} a year incl. ${money(w.premium.tax.gst)} GST`],
+        r && ['Renewal', r.label],
+      ]} />
+      <h4 style={{ marginBottom: '.4rem' }}>Documents</h4>
+      <DocLinks cisUrl={w.documents.cis} wordingUrl={w.documents.wording} ecardUrl={w.documents.ecard} name={w.policyNumber} />
+      {w.importantExclusions.length > 0 && <><h4 style={{ marginBottom: '.3rem' }}>Important exclusions</h4><ul style={{ margin: 0 }}>{w.importantExclusions.map((e) => <li key={e}>{e}</li>)}</ul></>}
+      <h4 style={{ marginBottom: '.3rem' }}>Claims contacts</h4>
+      <ul style={{ margin: 0 }}>
+        {w.claimsContacts.map((c) => <li key={c.kind}><strong>{c.kind}:</strong> {c.link ? <Link to={c.link}>{c.name}</Link> : c.name}{c.phone && ` · ${c.phone}`}{c.email && ` · ${c.email}`}{c.hours && ` · ${c.hours}`}</li>)}
+      </ul>
+      <div className="row" style={{ marginTop: '.8rem' }}>
+        {w.networkHospitalsLink && <Link className="btn sm secondary" to={w.networkHospitalsLink}>Network hospitals</Link>}
+        {isOwner && w.servicing.filter((s) => s.action !== 'renew').map((s) => <Link key={s.action} className="btn sm secondary" to={s.link}>{s.label}</Link>)}
+      </div>
     </Card>
   );
 }

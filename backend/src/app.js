@@ -22,14 +22,23 @@ import devRoutes from './routes/dev.js';
 import dashboardRoutes from './routes/dashboard.js';
 import aiRoutes from './routes/ai.js';
 import familyRoutes from './routes/family.js';
+import partnerRoutes from './routes/partners.js';
+import networkRoutes from './routes/network.js';
+import claimsOpsRoutes from './routes/claimsOps.js';
+import corporateRoutes from './routes/corporate.js';
+import enterpriseRoutes from './routes/enterprise.js';
+import './services/insurerHub.js'; // registers integration event handlers
+import { runStartupMigrations } from './services/seed.js';
 
 export function createApp() {
   load();
+  runStartupMigrations();
   const app = express();
   app.disable('x-powered-by');
   const origins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174').split(',');
   app.use(cors({ origin: origins, credentials: true }));
-  app.use(express.json({ limit: '1mb' }));
+  // Keep the exact request bytes so payment webhook signatures are verified over what was received.
+  app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
   // Authenticated data must never be served from a browser or proxy cache (e.g. after logout + Back).
   app.use('/api', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
@@ -53,6 +62,12 @@ export function createApp() {
   app.use('/api/reports', reportRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/family', familyRoutes);
+  // Enterprise platform modules
+  app.use('/api/partners', partnerRoutes); // insurer registry, onboarding, integration hub, insurer portal
+  app.use('/api/network', networkRoutes); // hospitals/providers, contracts, cashless networks, TPAs, bookings
+  app.use('/api/claims-ops', claimsOpsRoutes); // claim SLAs, grievances, fraud review
+  app.use('/api/corporate', corporateRoutes); // employers, group policies, enrolment, HR & employee portals
+  app.use('/api/enterprise', enterpriseRoutes); // command centre, finance ledgers, refunds, support desk, i18n
   if (process.env.NODE_ENV !== 'production') app.use('/api/dev', devRoutes);
 
   app.use((req, res) => res.status(404).json({ error: 'Route not found' }));

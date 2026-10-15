@@ -61,13 +61,22 @@ export function Applications() {
   );
 }
 
+const paidWith = (p) => (p.card ? <span>{p.card.brand} •••• {p.card.last4}</span>
+  : p.upi ? <span>{p.upi.qr ? 'UPI QR' : `UPI · ${p.upi.vpa}`}</span>
+    : p.netbanking ? <span>Netbanking · {p.netbanking.bankName}</span>
+      : <span className="muted">{p.autoPay ? 'Auto-debit' : 'Test gateway'}</span>);
+const REFUND_LABEL = { pending: 'Refund initiated', partially_refunded: 'Partially refunded', refunded: 'Refunded', refund_failed: 'Refund failed — we will retry' };
+
 export function Payments() {
   const res = useLoad(() => api.get('/payments'));
+  const links = useLoad(() => api.get('/payments/links').catch(() => []));
   const [receipt, setReceipt] = useState(null);
   const act = useAction();
+  const download = (p, kind) => act.run(() => api.download(`/payments/${p.reference}/${kind}.pdf`, `${kind === 'invoice' ? 'INV' : 'RCPT'}-${p.reference}.pdf`));
+  const refunds = (res.data || []).flatMap((p) => (p.refunds || []).map((r) => ({ ...r, paymentReference: p.reference, description: p.description })));
   return (
     <>
-      <PageHeader title="Payments & receipts" />
+      <PageHeader title="Payments & receipts" subtitle="Sandbox payments — no real money moves. Receipts and invoices are sandbox specimens." />
       <ErrorBox error={act.error} />
       <Card>
         {res.loading ? <Loading /> : (
@@ -76,27 +85,63 @@ export function Payments() {
               { key: 'reference', label: 'Reference', render: (p) => <code>{p.reference}</code> },
               { key: 'description', label: 'For' },
               { key: 'amount', label: 'Amount', num: true, render: (p) => money(p.amount) },
-              { key: 'method', label: 'Paid with', render: (p) => (p.card ? <span>{p.card.brand} •••• {p.card.last4}</span> : <span className="muted">{p.autoPay ? 'Auto-debit' : 'Test gateway'}</span>) },
-              { key: 'status', label: 'Status', render: (p) => <><Badge>{p.status}</Badge>{p.autoPay && <small className="muted"> auto-debit</small>}</> },
+              { key: 'method', label: 'Paid with', render: paidWith },
+              { key: 'status', label: 'Status', render: (p) => (
+                <>
+                  <Badge>{p.status}</Badge>{p.autoPay && <small className="muted"> auto-debit</small>}
+                  {p.refundStatus && <div><Badge kind={p.refundStatus === 'refund_failed' ? 'error' : 'info'}>{REFUND_LABEL[p.refundStatus] || p.refundStatus}</Badge></div>}
+                  {['failed', 'expired'].includes(p.status) && p.failureReason && <div className="muted" style={{ fontSize: '.8rem' }}>{p.failureReason}</div>}
+                </>
+              ) },
               { key: 'createdAt', label: 'Date', render: (p) => dateTime(p.completedAt || p.createdAt) },
               { key: 'x', label: '', render: (p) => (
                 <div className="row">
-                  {p.status === 'success' && <button className="btn sm secondary" onClick={() => setReceipt(p)}>Receipt</button>}
+                  {['success', 'refund_due', 'refunded'].includes(p.status) && (
+                    <>
+                      <button className="btn sm secondary" onClick={() => setReceipt(p)}>Receipt</button>
+                      <button className="btn sm ghost" disabled={act.busy} onClick={() => download(p, 'receipt')}>PDF</button>
+                      <button className="btn sm ghost" disabled={act.busy} onClick={() => download(p, 'invoice')}>Invoice</button>
+                    </>
+                  )}
                   {p.status === 'pending' && <button className="btn sm" disabled={act.busy} onClick={() => act.run(async () => { await api.post(`/payments/${p.reference}/simulate`, { outcome: 'success' }); res.reload(); })}>Bank confirms (test)</button>}
                 </div>
               ) },
             ]} />
         )}
       </Card>
+      {refunds.length > 0 && (
+        <Card title="Refunds">
+          <Table rows={refunds} columns={[
+            { key: 'reference', label: 'Refund', render: (r) => <code>{r.reference}</code> },
+            { key: 'paymentReference', label: 'Of payment', render: (r) => <><code>{r.paymentReference}</code><div className="muted">{r.description}</div></> },
+            { key: 'amount', label: 'Amount', num: true, render: (r) => <>{money(r.amount)}{r.partial && <div className="muted">partial</div>}</> },
+            { key: 'reason', label: 'Reason' },
+            { key: 'status', label: 'Status', render: (r) => <Badge>{r.status}</Badge> },
+            { key: 'createdAt', label: 'Initiated', render: (r) => dateTime(r.createdAt) },
+          ]} />
+          <p className="muted" style={{ fontSize: '.85rem', marginBottom: 0 }}>Refunds go back to the original payment method. In the sandbox they complete instantly once finance approves them.</p>
+        </Card>
+      )}
+      {links.data?.length > 0 && (
+        <Card title="Payment links">
+          <Table rows={links.data} columns={[
+            { key: 'code', label: 'Link', render: (l) => (l.status === 'active' ? <Link to={l.path}>{l.code}</Link> : <code>{l.code}</code>) },
+            { key: 'description', label: 'For' }, { key: 'amount', label: 'Amount', num: true, render: (l) => money(l.amount) },
+            { key: 'status', label: 'Status', render: (l) => <Badge>{l.status}</Badge> }, { key: 'expiresAt', label: 'Expires', render: (l) => dateTime(l.expiresAt) },
+          ]} />
+        </Card>
+      )}
       {receipt && (
-        <Card title="Payment receipt" actions={<><button className="btn sm secondary" onClick={() => window.print()}>Print</button><button className="btn sm ghost" onClick={() => setReceipt(null)}>Close</button></>}>
+        <Card title="Payment receipt" actions={<><button className="btn sm secondary" onClick={() => download(receipt, 'receipt')}>Download PDF</button><button className="btn sm secondary" onClick={() => window.print()}>Print</button><button className="btn sm ghost" onClick={() => setReceipt(null)}>Close</button></>}>
           <dl className="kv">
             <dt>Receipt for</dt><dd>{receipt.description}</dd>
             <dt>Reference</dt><dd><code>{receipt.reference}</code></dd>
             <dt>Amount received</dt><dd>{money(receipt.amount)}</dd>
             <dt>Paid on</dt><dd>{dateTime(receipt.completedAt)}</dd>
-            <dt>Method</dt><dd>{receipt.card ? `${receipt.card.brand} card •••• ${receipt.card.last4} (test mode)` : receipt.method}{receipt.autoPay ? ' (auto-debit)' : ''}</dd>
+            <dt>Method</dt><dd>{paidWith(receipt)} ({receipt.mode || 'test'} mode){receipt.autoPay ? ' (auto-debit)' : ''}</dd>
+            {receipt.refundedAmount ? <><dt>Refunded</dt><dd>{money(receipt.refundedAmount)}</dd></> : null}
           </dl>
+          <p className="muted" style={{ fontSize: '.85rem' }}>Premium is collected on behalf of the insurer named on your policy and is passed on to them.</p>
         </Card>
       )}
     </>

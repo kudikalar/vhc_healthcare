@@ -151,7 +151,11 @@ r.post('/mobile/verify', authenticate, (req, res) => {
 
 // ---------------- M03 login & sessions ----------------
 r.post('/login', (req, res) => {
-  const email = cleanEmail(req.body?.email);
+  // Sign-in accepts an email address or a QA username (e.g. customer_arjun) for the demo fixtures.
+  const rawId = String(req.body?.email ?? req.body?.username ?? '').trim();
+  const byUsername = rawId && !rawId.includes('@') && /^[a-z0-9_.-]{3,40}$/i.test(rawId)
+    ? db.findOne('users', (x) => x.username && x.username.toLowerCase() === rawId.toLowerCase()) : null;
+  const email = byUsername ? byUsername.emailLower : cleanEmail(rawId);
   if (!email) throw bad('Enter a valid email address.');
   const password = req.body?.password;
   if (typeof password !== 'string' || password.length === 0) throw bad('Enter your password.');

@@ -13,11 +13,28 @@ import { APP_STATUS as S, EDITABLE, timelineNote, transition, validateNominees }
 import { audit, notify } from '../services/audit.js';
 import { bucketFilter } from '../services/buckets.js';
 import { profileProblems } from '../services/profile.js';
+import { distributionStatus, insurerOf } from '../services/insurerHub.js';
+import { newCorrelationId, publish } from '../services/events.js';
+import { decorateQuote, journey, purchaseStatus, QUOTE_VALIDITY_DAYS } from '../services/partnersCatalog.js';
 
 const r = Router();
 r.use(authenticate);
 
-const QUOTE_DAYS = 7;
+const QUOTE_DAYS = QUOTE_VALIDITY_DAYS;
+
+/** Purchase is only possible while the product's insurer may distribute it (spec §11 / insurerHub). */
+function assertDistributable(app) {
+  const plan = db.get('plans', app.planId);
+  const d = plan ? distributionStatus(plan) : { allowed: false, reason: 'Plan not found' };
+  if (!d.allowed) throw conflict(`This product is not available for purchase: ${d.reason}`, { code: 'DISTRIBUTION_BLOCKED', reason: d.reason });
+}
+
+/** Records an underwriting change on the event log (correlated per application). */
+function uwEvent(app, actor, change) {
+  publish('UNDERWRITING_UPDATED', { applicationId: app.id, status: app.status, change }, {
+    correlationId: app.correlationId, actor, subject: { type: 'application', id: app.id },
+  });
+}
 const OFFER_DAYS = 30;
 const MEMBER_FIELDS = ['fullName', 'dob', 'relationship', 'gender', 'heightCm', 'weightKg', 'hasConditions', 'conditions', 'medications', 'surgeries', 'tobacco', 'idType', 'idNumber'];
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
@@ -35,6 +52,24 @@ function viewFor(user, app) {
   }
   v.editable = EDITABLE.includes(app.status);
   v.quoteValid = !!(app.quote && app.quote.expiresAt > now().toISOString() && app.quote.inputHash === materialHash(app));
+  // Purchase journey (spec §7): customer-facing status, step indicator and the selling insurer.
+  const plan = db.get('plans', app.planId);
+  const ins = plan && insurerOf(plan);
+  const docs = db.find('documents', (d) => d.entityType === 'application' && d.entityId === app.id);
+  const proposerProblems = owner ? profileProblems(owner) : ['Proposer not found'];
+  const declProblems = declarationProblems(app);
+  v.proposer = { name: owner?.legalName || owner?.name || null, complete: proposerProblems.length === 0, problems: proposerProblems };
+  v.declarationsComplete = declProblems.length === 0;
+  v.documentsStatus = { identity: docs.some((d) => d.category === 'identity'), income: docs.some((d) => d.category === 'income'), count: docs.length };
+  v.purchase = purchaseStatus(app);
+  v.journey = journey(app, {
+    declarationsComplete: v.declarationsComplete, proposerComplete: v.proposer.complete,
+    documentsComplete: v.documentsStatus.identity && (app.product !== 'life' || v.documentsStatus.income),
+    nomineesComplete: app.product === 'life' ? validateNominees(app.life.nominees).errors.length === 0 : null,
+  });
+  v.insurer = ins ? { id: ins.id, name: ins.name, sandbox: !!ins.sandbox } : null;
+  v.productInfo = plan ? { uin: plan.uin || null, sandbox: plan.sandbox !== false, version: app.offer?.planVersion ?? app.planVersion } : null;
+  v.distribution = plan ? distributionStatus(plan) : { allowed: false, reason: 'Plan not found' };
   return v;
 }
 
@@ -105,6 +140,7 @@ r.get('/', (req, res) => {
     customerName: db.get('users', a.userId)?.name, createdAt: a.createdAt, updatedAt: a.updatedAt, submittedAt: a.submittedAt,
     premium: a.offer?.annualPremium ?? a.quote?.totalAnnualPremium ?? a.quote?.annualPremium ?? null,
     underwritingRequired: !!a.quote?.underwritingRequired, renewalOf: a.renewalOf || null, policyId: a.policyId || null,
+    purchaseStatus: purchaseStatus(a).status,
   })));
 });
 
@@ -114,7 +150,7 @@ export function createApplication(userId, plan, extra = {}) {
     userId, product: plan.product, planId: plan.id, planName: plan.name, planType: plan.type, planVersion: currentVersion(plan).version,
     status: S.DRAFT, startDate: addDays(today(), 1), consent: { given: false }, quote: null, offer: null, offerHistory: [],
     underwriting: { notes: [], requirements: [], decisions: [] }, review: { notes: [] }, timeline: [],
-    returnTo: null, renewalOf: null, policyId: null,
+    returnTo: null, renewalOf: null, policyId: null, correlationId: newCorrelationId(),
   };
   if (plan.product === 'health') base.health = { coverage: null, optionalBenefits: [], members: [] };
   else {
@@ -132,6 +168,7 @@ export function createApplication(userId, plan, extra = {}) {
 r.post('/', requireRole('customer'), (req, res) => {
   const plan = db.get('plans', req.body?.planId);
   if (!plan || !plan.active) throw notFound('Plan not found or inactive');
+  assertDistributable({ planId: plan.id });
   const app = tx(() => {
     const a = createApplication(req.user.id, plan);
     if (plan.product === 'health' && req.body.coverage) a.health.coverage = req.body.coverage;
@@ -192,10 +229,31 @@ r.post('/:id/quote', requireRole('customer'), (req, res) => {
     ? computeHealthQuote(plan, { ...app.health, startDate: app.startDate })
     : computeLifeQuote(plan, { ...lifeQuoteInputs(app), medical: app.life.medicalHistory });
   tx(() => {
+    const dq = decorateQuote(q, plan);
     app.planVersion = q.planVersion;
-    app.quote = { ...q, inputHash: materialHash(app), calculatedAt: now().toISOString(), expiresAt: new Date(now().getTime() + QUOTE_DAYS * 86400000).toISOString() };
+    app.quote = { ...dq, inputHash: materialHash(app), calculatedAt: now().toISOString(), expiresAt: new Date(now().getTime() + QUOTE_DAYS * 86400000).toISOString() };
     app.quoteInvalidatedReason = null;
-    db.insert('quotes', { ...q, userId: req.user.id, applicationId: app.id, expiresAt: app.quote.expiresAt });
+    const rec = db.insert('quotes', { ...dq, userId: req.user.id, applicationId: app.id, expiresAt: app.quote.expiresAt });
+    publish('QUOTE_CREATED', { quoteId: rec.id, reference: dq.reference, applicationId: app.id, planId: plan.id, insurerId: plan.insurerId || null, premium: dq.totalAnnualPremium ?? dq.annualPremium }, {
+      correlationId: app.correlationId, actor: req.user, subject: { type: 'application', id: app.id }, idempotencyKey: `quote:${dq.reference}`,
+    });
+    timelineNote(app, req.user, `Quote ${dq.reference} generated (valid ${QUOTE_DAYS} days)`);
+    db.touch(app);
+  });
+  res.json(viewFor(req.user, app));
+});
+
+/** Customer confirms they have read the Customer Information Sheet and policy wording for this version. */
+r.post('/:id/disclosures/acknowledge', requireRole('customer'), (req, res) => {
+  const app = loadOwn(req);
+  if (!EDITABLE.includes(app.status)) throw conflict('Documents can be acknowledged while the application is editable');
+  const docs = Array.isArray(req.body?.documents) ? req.body.documents : [];
+  if (!docs.includes('cis') || !docs.includes('wording')) throw bad('Confirm you have read both the Customer Information Sheet and the policy wording');
+  tx(() => {
+    const version = app.planVersion;
+    app.disclosures = { cis: true, wording: true, planVersion: version, acknowledgedAt: now().toISOString() };
+    audit(req.user, 'DISCLOSURES_ACKNOWLEDGED', 'application', app.id, { planVersion: version });
+    timelineNote(app, req.user, `Customer Information Sheet and policy wording (version ${version}) acknowledged`);
     db.touch(app);
   });
   res.json(viewFor(req.user, app));
@@ -240,8 +298,12 @@ r.post('/:id/submit', requireRole('customer'), (req, res) => {
   problems.push(...declarationProblems(app));
   if (!app.consent?.given) problems.push('You must confirm the declarations are true and give consent');
   if (problems.length) throw unprocessable('Application is incomplete', { problems });
+  assertDistributable(app);
 
   tx(() => {
+    publish('PROPOSAL_SUBMITTED', { applicationId: app.id, planId: app.planId, renewalOf: app.renewalOf || null, quoteReference: app.quote.reference || null, resubmission: !!app.returnTo }, {
+      correlationId: app.correlationId, actor: req.user, subject: { type: 'application', id: app.id },
+    });
     if (app.product === 'life') app.life.nominees = validateNominees(app.life.nominees).normalized;
     app.submittedAt = now().toISOString();
     if (app.renewalOf && app.status === S.DRAFT) {
@@ -270,6 +332,7 @@ r.post('/:id/accept-offer', requireRole('customer'), (req, res) => {
   const app = loadOwn(req);
   if (app.status !== S.APPROVED) throw conflict('There is no approved offer to accept');
   if (app.offer.expiresAt < today()) throw conflict('This offer has expired; please contact us to have it re-issued');
+  assertDistributable(app);
   tx(() => {
     app.offer.acceptedAt = now().toISOString();
     transition(app, S.ACCEPTED, req.user, app.offer.revised ? 'Revised terms accepted' : 'Offer accepted');
@@ -325,6 +388,7 @@ r.post('/:id/review/request-correction', reviewer, (req, res) => {
     app.returnTo = S.INITIAL_REVIEW;
     app.underwriting.requirements.push({ id: newId('req'), type: 'information', description: note, status: 'requested', requestedBy: req.user.name, requestedAt: now().toISOString() });
     transition(app, S.MIR, req.user, `Correction requested: ${note}`);
+    uwEvent(app, req.user, 'correction_requested');
     audit(req.user, 'CORRECTION_REQUESTED', 'application', app.id, { note });
     notify(app.userId, 'Action needed on your application', note, { type: 'warning', link: `/applications/${app.id}` });
   });
@@ -337,6 +401,7 @@ r.post('/:id/review/forward', reviewer, (req, res) => {
   tx(() => {
     app.underwriting.requirements.filter((x) => x.type === 'information' && x.status === 'requested').forEach((x) => { x.status = 'received'; x.receivedAt = now().toISOString(); });
     transition(app, S.UNDERWRITING, req.user, req.body?.note || 'Complete — forwarded to underwriting');
+    uwEvent(app, req.user, 'forwarded_to_underwriting');
   });
   res.json(viewFor(req.user, app));
 });
@@ -370,6 +435,7 @@ r.post('/:id/underwriting/requirements', underwriter, (req, res) => {
       transition(app, S.MIR, req.user, `More information required: ${reqmt.description}`);
     } else timelineNote(app, req.user, `Requirement added: ${type.replace('_', ' ')} — ${reqmt.description}`);
     audit(req.user, 'UW_REQUIREMENT_ADDED', 'application', app.id, reqmt);
+    uwEvent(app, req.user, `requirement_added:${type}`);
     notify(app.userId, 'Underwriting requirement', `${reqmt.description}${scheduledAt ? ` (scheduled ${scheduledAt}${center ? ` at ${center}` : ''})` : ''}`, { type: 'warning', link: `/applications/${app.id}` });
     db.touch(app);
   });
@@ -389,6 +455,7 @@ r.post('/:id/underwriting/requirements/:rid', underwriter, (req, res) => {
       Object.assign(reqmt, { status: 'waived', note });
     } else throw bad('action must be schedule, received or waive');
     audit(req.user, 'UW_REQUIREMENT_UPDATED', 'application', app.id, { requirement: reqmt.id, action });
+    uwEvent(app, req.user, `requirement_${action}`);
     timelineNote(app, req.user, `Requirement "${reqmt.description}" ${reqmt.status}`);
     db.touch(app);
   });
@@ -434,6 +501,7 @@ r.post('/:id/underwriting/decision', underwriter, (req, res) => {
     } else throw bad('decision must be approve, revise, reject or postpone');
     app.underwriting.decisions.push(rec);
     audit(req.user, `UW_${decision.toUpperCase()}`, 'application', app.id, { reason, offerPremium: app.offer?.annualPremium });
+    uwEvent(app, req.user, `decision:${decision}`);
     const msg = {
       approve: 'Your application has been approved. Accept the offer to proceed to payment.',
       revise: `Underwriting proposed revised terms: ${reason}. Review and accept to continue.`,

@@ -28,6 +28,17 @@ const P = {
   offline: 'M2 8.5a15 15 0 0 1 5-3M22 8.5a15 15 0 0 0-10-3.5M5 12.5a10 10 0 0 1 3.5-2.2M19 12.5a10 10 0 0 0-4-2.4M8.5 16a5 5 0 0 1 7 0M12 20h.01M3 3l18 18',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11',
   chevron: 'M9 6l6 6-6 6',
+  building: 'M4 21V4h10v17M14 9h6v12M2 21h20M7 8h1M10 8h1M7 12h1M10 12h1M7 16h1M10 16h1M17 13h.01M17 17h.01',
+  briefcase: 'M3 8h18v12H3zM8 8V5h8v3M3 13h18',
+  ledger: 'M5 3h12a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2V3zM5 17h14M9 7h6M9 11h6',
+  ticket: 'M3 8V5h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4zM14 5v10',
+  globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  flag: 'M5 21V4M5 4h11l-2 4 2 4H5',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  calendar: 'M4 6h16v15H4zM4 10h16M8 3v4M16 3v4',
+  stethoscope: 'M6 3v6a4 4 0 0 0 8 0V3M10 13v3a5 5 0 0 0 10 0v-2M20 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  scale: 'M12 3v18M5 21h14M4 8h16M7 8l-3 7a3 3 0 0 0 6 0L7 8zM17 8l-3 7a3 3 0 0 0 6 0l-3-7z',
 };
 
 export default function Icon({ name, size = 20, className = '', title }) {

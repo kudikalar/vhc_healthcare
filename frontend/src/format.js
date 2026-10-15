@@ -17,4 +17,9 @@ export const dateTime = (s) => (s ? new Date(s).toLocaleString('en-IN', { day: '
 export const pct = (bp) => `${(bp / 100).toFixed(bp % 100 ? 2 : 0)}%`;
 export const titleCase = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-export const ROLE_LABEL = { customer: 'Customer', claimant: 'Claimant', agent: 'Insurance Agent', underwriter: 'Underwriter', claims_officer: 'Claims Officer', admin: 'Administrator' };
+export const ROLE_LABEL = {
+  customer: 'Customer', claimant: 'Claimant', agent: 'Sales Executive', underwriter: 'Underwriter', claims_officer: 'Claims Coordinator', admin: 'Super Administrator',
+  operations_admin: 'Operations Admin', sales_manager: 'Sales Manager', finance_manager: 'Finance Manager', support_manager: 'Support Manager', support_agent: 'Support Agent',
+  compliance_officer: 'Compliance Officer', auditor: 'Auditor', insurer_admin: 'Insurer Partner Admin', insurer_user: 'Insurer Partner User',
+  hospital_admin: 'Hospital Admin', hospital_staff: 'Hospital Staff', tpa_admin: 'TPA Admin', tpa_agent: 'TPA Agent', corporate_admin: 'Corporate Admin', corporate_hr: 'Corporate HR',
+};

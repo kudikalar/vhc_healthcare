@@ -1,0 +1,85 @@
+/* Partners module (insurer registry, integration hub, insurer portal, marketplace, wallet, sales).
+   Builds on the shared design tokens in src/styles.css; every class is prefixed pt- to stay local. */
+
+.pt-tag { display: inline-flex; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; padding: .12rem .5rem; border-radius: 999px; border: 1px dashed currentColor; white-space: nowrap; }
+.pt-tag.sandbox { color: var(--warn); background: var(--warn-50); }
+.pt-tag.candidate { color: var(--danger); background: var(--danger-50); }
+.pt-tag.blocked { color: var(--danger); background: var(--danger-50); border-style: solid; }
+.pt-muted-sm { font-size: .82rem; color: var(--muted); }
+.pt-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; word-break: break-all; }
+
+/* Purchase journey step indicator */
+.pt-stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: .45rem; }
+.pt-stepper li { position: relative; display: flex; gap: .45rem; align-items: center; padding: .45rem .55rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); font-size: .8rem; line-height: 1.25; color: var(--text-2); min-width: 0; }
+.pt-stepper .dot { flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: .72rem; font-weight: 700; background: var(--border); color: var(--text-2); }
+.pt-stepper li.done { background: var(--ok-50); border-color: #bfe5cf; color: var(--ok); }
+.pt-stepper li.done .dot { background: var(--ok); color: #fff; }
+.pt-stepper li.current { background: var(--brand-50); border-color: var(--brand); color: var(--brand-700); font-weight: 600; box-shadow: var(--focus); }
+.pt-stepper li.current .dot { background: var(--brand); color: #fff; }
+.pt-stepper li.failed, .pt-stepper li.stopped { background: var(--danger-50); border-color: #f6cfcb; color: var(--danger); }
+.pt-stepper li.not_applicable { opacity: .6; text-decoration: line-through; }
+.pt-stepper li.skipped { opacity: .7; border-style: dashed; }
+.pt-stepper li.waiting { background: var(--info-50); border-color: #cddbfb; color: var(--info); font-weight: 600; }
+.pt-stepper li.waiting .dot { background: var(--info); color: #fff; }
+@media (max-width: 520px) { .pt-stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.pt-status-banner { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; padding: .8rem 1rem; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); margin-bottom: 1rem; }
+.pt-status-banner strong { font-size: 1.05rem; }
+
+/* Category chips & product cards */
+.pt-cats { display: flex; gap: .45rem; flex-wrap: wrap; margin: .25rem 0 1rem; }
+.pt-cats button { font: inherit; font-size: .85rem; border: 1px solid var(--border-strong); background: #fff; color: var(--text-2); border-radius: 999px; padding: .32rem .8rem; cursor: pointer; display: inline-flex; gap: .35rem; align-items: center; min-height: 36px; }
+.pt-cats button[aria-pressed='true'] { background: var(--brand); border-color: var(--brand); color: #fff; }
+.pt-cats button .n { font-size: .72rem; background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 0 .4rem; }
+.pt-cats button[aria-pressed='true'] .n { background: rgba(255, 255, 255, .25); color: #fff; }
+.pt-product-meta { display: flex; flex-wrap: wrap; gap: .35rem .6rem; align-items: center; font-size: .8rem; color: var(--muted); margin: .25rem 0 .5rem; }
+
+/* Comparison table: first column sticky so it stays readable while scrolling inside the card */
+.pt-compare th:first-child, .pt-compare td:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 150px; }
+.pt-compare td { vertical-align: top; min-width: 190px; font-size: .88rem; }
+.pt-na { color: var(--muted); font-style: italic; }
+
+/* Onboarding stage track */
+.pt-track { list-style: none; padding: 0; margin: 0 0 .75rem; display: flex; flex-wrap: wrap; gap: .3rem; }
+.pt-track li { font-size: .76rem; padding: .25rem .55rem; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+.pt-track li.done { background: var(--ok-50); color: var(--ok); border-color: #bfe5cf; }
+.pt-track li.now { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
+.pt-gates { list-style: none; margin: .25rem 0 0; padding: 0; display: grid; gap: .3rem; }
+.pt-gates li { display: flex; gap: .45rem; align-items: baseline; font-size: .86rem; }
+.pt-gates .ok { color: var(--ok); font-weight: 700; }
+.pt-gates .no { color: var(--danger); font-weight: 700; }
+.pt-tasks { list-style: none; padding: 0; margin: 0; display: grid; gap: .2rem; }
+.pt-tasks label { display: flex; gap: .5rem; align-items: flex-start; font-size: .88rem; padding: .25rem 0; }
+
+/* Ops matrix */
+.pt-ops { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .4rem; }
+.pt-ops div { display: flex; gap: .45rem; align-items: flex-start; font-size: .84rem; padding: .45rem .55rem; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); }
+.pt-ops div.yes { background: var(--ok-50); border-color: #bfe5cf; }
+.pt-ops small { display: block; color: var(--muted); }
+
+/* Funnel + pipeline */
+.pt-funnel { display: grid; gap: .5rem; }
+.pt-funnel .bar { display: grid; grid-template-columns: minmax(110px, 160px) 1fr auto; gap: .6rem; align-items: center; font-size: .88rem; }
+.pt-funnel .track { height: 14px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; }
+.pt-funnel .fill { height: 100%; background: var(--brand); border-radius: 7px; }
+.pt-pipeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: .75rem; overflow-x: auto; padding-bottom: .5rem; }
+.pt-col { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem; min-height: 120px; }
+.pt-col h4 { margin: 0 0 .5rem; font-size: .85rem; display: flex; justify-content: space-between; }
+.pt-lead { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .55rem .65rem; margin-bottom: .45rem; cursor: pointer; width: 100%; text-align: left; font: inherit; color: inherit; display: block; }
+.pt-lead:hover, .pt-lead:focus-visible { border-color: var(--brand); outline: none; box-shadow: var(--focus); }
+.pt-lead .score { float: right; font-weight: 700; color: var(--brand-600); }
+.pt-lead small { display: block; color: var(--muted); }
+.pt-factors { list-style: none; margin: 0; padding: 0; font-size: .86rem; }
+.pt-factors li { display: flex; justify-content: space-between; gap: .5rem; padding: .2rem 0; border-bottom: 1px dashed var(--border); }
+.pt-factors li.neg span:last-child { color: var(--danger); }
+
+/* Wallet */
+.pt-wallet { display: grid; gap: .25rem; margin-top: .6rem; font-size: .84rem; }
+.pt-wallet .row { gap: .35rem; }
+.pt-doc-links { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+@media (max-width: 520px) {
+  .pt-funnel .bar { grid-template-columns: 1fr auto; }
+  .pt-funnel .track { grid-column: 1 / -1; order: 3; }
+  .pt-compare td { min-width: 160px; }
+}

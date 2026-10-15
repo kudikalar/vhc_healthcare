@@ -5,6 +5,8 @@ import { useAuth } from '../auth.jsx';
 import { ROLE_LABEL, date } from '../format.js';
 import Icon from './Icon.jsx';
 import AssistantLauncher from './AIAssistant.jsx';
+import { moduleNav, TopbarExtras } from '../modules.js';
+import { useT } from '../pages/enterprise/i18n.jsx';
 
 // Navigation follows the V2 spec: customer, staff (only authorised workspaces) and mobile tab bar.
 const NAV = {
@@ -68,18 +70,19 @@ function useOnline() {
 }
 
 const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]).join('').toUpperCase() || '?';
-const exact = (to) => ['/ops', '/dashboard', '/claims'].includes(to);
+const exact = (to) => ['/ops', '/dashboard', '/claims', '/insurer', '/hospital', '/tpa', '/corporate', '/finance', '/helpdesk', '/command'].includes(to);
 const LANDING = ['/', '/home'];
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const t = useT();
   const nav = useNavigate();
   const loc = useLocation();
   const unread = useUnread(user);
   const clock = useClock();
   const online = useOnline();
   const [drawer, setDrawer] = useState(false);
-  const groups = user ? NAV[user.role] || [] : [];
+  const groups = user ? [...(NAV[user.role] || []), ...moduleNav(user.role)] : [];
   const bare = BARE.includes(loc.pathname);
   const isCustomer = user?.role === 'customer';
   const withShell = !bare && user && groups.length > 0;
@@ -112,15 +115,16 @@ export default function Layout() {
         <Link to="/" className="brand"><img src="/logo-mark.png" alt="" className="brand-logo" /><span className="brand-text">Vision <b>Health Care</b></span></Link>
         {!withShell && (
           <nav className="topnav" aria-label="Public">
-            <NavLink to="/plans">Plans</NavLink>
-            <NavLink to="/quote">Get a quote</NavLink>
-            <NavLink to="/hospitals">Hospitals</NavLink>
-            <NavLink to="/planner">Cover planner</NavLink>
-            <NavLink to="/life-claim">Report a life claim</NavLink>
+            <NavLink to="/plans">{t('Plans')}</NavLink>
+            <NavLink to="/quote">{t('Get a quote')}</NavLink>
+            <NavLink to="/hospitals">{t('Hospitals')}</NavLink>
+            <NavLink to="/planner">{t('Cover planner')}</NavLink>
+            <NavLink to="/life-claim">{t('Report a life claim')}</NavLink>
           </nav>
         )}
         <div className="spacer" />
         <div className="topbar-right">
+          <TopbarExtras />
           {clock && clock.offsetDays !== 0 && <span className="badge warn" title="The test clock is shifted">Test date {date(clock.today)}</span>}
           {user ? (
             <>
@@ -153,9 +157,9 @@ export default function Layout() {
             </div>
             {groups.map(([title, links], gi) => (
               <nav key={title || gi} aria-label={title || 'Primary'}>
-                {title && <h4>{title}</h4>}
+                {title && <h4>{t(title)}</h4>}
                 {links.map(([to, label, ico]) => (
-                  <NavLink key={to} to={to} end={exact(to)}><Icon name={ico} size={19} />{label}</NavLink>
+                  <NavLink key={to} to={to} end={exact(to)}><Icon name={ico} size={19} />{t(label)}</NavLink>
                 ))}
               </nav>
             ))}
@@ -176,16 +180,16 @@ export default function Layout() {
       {withShell && isCustomer && (
         <nav className="tabbar" aria-label="Quick navigation">
           {MOBILE_TABS.map(([to, label, ico]) => (
-            <NavLink key={to} to={to} end={exact(to)}><Icon name={ico} size={22} /><span>{label}</span></NavLink>
+            <NavLink key={to} to={to} end={exact(to)}><Icon name={ico} size={22} /><span>{t(label)}</span></NavLink>
           ))}
-          <button type="button" onClick={() => setDrawer(true)} aria-expanded={drawer}><Icon name="menu" size={22} /><span>More</span></button>
+          <button type="button" onClick={() => setDrawer(true)} aria-expanded={drawer}><Icon name="menu" size={22} /><span>{t('More')}</span></button>
         </nav>
       )}
       <AssistantLauncher />
       {!bare && (
         <footer className={`footer ${withShell ? 'with-shell' : ''}`}>
           <img src="/logo-mark.png" alt="" width="20" height="20" />
-          <span>Vision Health Care — a demonstration system. All products, prices, people and hospitals are fictional; insurer decisions shown here are simulated.</span>
+          <span>Vision Health Care — staging/sandbox system. VHC is a technology platform; insurance is issued only by the insurer named on each product. Sandbox products, prices, people and partners are synthetic, insurer decisions are simulated and no real payment is taken.</span>
         </footer>
       )}
     </>

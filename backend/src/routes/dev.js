@@ -9,6 +9,9 @@ import { isValidDate, toDate } from '../utils/dates.js';
 import { resetAndSeed } from '../services/seed.js';
 import { runJobs } from '../services/jobs.js';
 import { audit } from '../services/audit.js';
+import { db } from '../db.js';
+import { applyIssuanceDecision, ISSUANCE_MODES } from '../services/insurerHub.js';
+import { retryPendingEvents } from '../services/events.js';
 
 const r = Router();
 const clockInfo = () => ({ now: now().toISOString(), today: today(), offsetDays: Math.round((meta().clockOffsetMs || 0) / 86400000), autoPayOutcome: meta().autoPayOutcome || 'success' });
@@ -48,5 +51,21 @@ r.post('/autopay-outcome', (req, res) => {
 });
 
 r.post('/run-jobs', (req, res) => res.json(runJobs()));
+
+/** Sandbox insurer behaviour after payment: auto-issue, wait for a manual decision, or decline. */
+r.get('/mock-insurer', (req, res) => res.json({ ...(meta().mockInsurer || { issuanceMode: 'auto' }), modes: ISSUANCE_MODES }));
+r.post('/mock-insurer', (req, res) => {
+  const mode = req.body?.issuanceMode;
+  if (!ISSUANCE_MODES.includes(mode)) throw bad(`issuanceMode must be one of ${ISSUANCE_MODES.join(', ')}`);
+  tx(() => { meta().mockInsurer = { ...(meta().mockInsurer || {}), issuanceMode: mode }; audit(req.user, 'MOCK_INSURER_MODE', 'system', null, { mode }); });
+  res.json(meta().mockInsurer);
+});
+/** Simulates the sandbox insurer's issuance callback for a proposal in "Issuance Pending". */
+r.post('/insurer-decision', (req, res) => {
+  const { applicationId, decision, reason } = req.body || {};
+  const out = tx(() => applyIssuanceDecision(db.get('applications', applicationId), { decision, reason, insurerReference: decision === 'issued' ? `SBX-MANUAL-${Date.now()}` : undefined }, { name: 'Sandbox Insurer (simulated callback)', role: 'insurer' }));
+  res.json({ status: out.status, policyId: out.policy?.id || null, refund: out.refund || null });
+});
+r.post('/events/retry', (req, res) => res.json(tx(() => retryPendingEvents({ force: true }))));
 
 export default r;

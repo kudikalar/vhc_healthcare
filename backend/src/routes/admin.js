@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db, tx } from '../db.js';
 import { now } from '../clock.js';
-import { authenticate, requireRole, ROLES, STAFF } from '../middleware/auth.js';
+import { authenticate, ORG_COLLECTION, PARTNER_ROLES, READ_ONLY_ROLES, requireRole, ROLES, STAFF } from '../middleware/auth.js';
 import { bad, conflict, notFound, unprocessable } from '../utils/errors.js';
 import { audit, notify } from '../services/audit.js';
 import { initiatePayment, initiatePayout, processPaymentCallback } from '../services/payments.js';
@@ -15,14 +15,24 @@ r.use(authenticate);
 const admin = requireRole('admin');
 
 // ---------- users & roles ----------
-r.get('/users', admin, (req, res) => {
-  const { role, q } = req.query;
-  res.json(db.find('users', (u) => (!role || u.role === role) && (!q || `${u.name} ${u.email}`.toLowerCase().includes(String(q).toLowerCase()))).map((u) => publicUser(u)));
+/** Organisation (type + name) a partner user belongs to, for the Users & roles screen. */
+function withOrg(u) {
+  const view = publicUser(u);
+  const orgType = PARTNER_ROLES[u.role] || null;
+  const org = orgType && u.orgId ? db.get(ORG_COLLECTION[orgType], u.orgId) : null;
+  return { ...view, orgType, orgName: org ? org.name || org.legalName : null };
+}
+
+// Oversight roles (auditor, compliance officer) may read the user directory; only admins change it.
+r.get('/users', requireRole('admin', ...READ_ONLY_ROLES), (req, res) => {
+  const { role, q, orgType, orgId } = req.query;
+  res.json(db.find('users', (u) => (!role || u.role === role) && (!orgType || PARTNER_ROLES[u.role] === orgType) && (!orgId || u.orgId === orgId)
+    && (!q || `${u.name} ${u.email}`.toLowerCase().includes(String(q).toLowerCase()))).map(withOrg));
 });
 
 /** Staff accounts are created by invitation only; the invitee sets their own password. */
 r.post('/users', admin, (req, res) => {
-  const { firstName, lastName, email, role } = req.body || {};
+  const { firstName, lastName, email, role, orgId } = req.body || {};
   const fields = {};
   const fn = cleanName(firstName);
   if (!fn) fields.firstName = 'Enter a first name.';
@@ -30,7 +40,9 @@ r.post('/users', admin, (req, res) => {
   if (ln === null) fields.lastName = 'Use letters, spaces, apostrophes or hyphens.';
   const em = cleanEmail(email);
   if (!em) fields.email = 'Enter a valid email address.';
-  if (!STAFF.includes(role)) fields.role = 'Select a staff role.';
+  if (!STAFF.includes(role) && !PARTNER_ROLES[role]) fields.role = 'Select a staff or partner role.';
+  // Partner users must belong to exactly one existing organisation of the matching type.
+  if (PARTNER_ROLES[role] && !(orgId && db.get(ORG_COLLECTION[PARTNER_ROLES[role]], orgId))) fields.orgId = 'Select the partner organisation for this user.';
   if (Object.keys(fields).length) throw unprocessable('Please correct the highlighted fields.', { fields });
   if (db.findOne('users', (u) => u.emailLower === em.toLowerCase())) throw conflict('An account with this email already exists');
   const { u, token } = tx(() => {
@@ -38,12 +50,13 @@ r.post('/users', admin, (req, res) => {
       firstName: fn, lastName: ln, name: displayName({ firstName: fn, lastName: ln }), legalName: displayName({ firstName: fn, lastName: ln }),
       email: em, emailLower: em.toLowerCase(), emailVerified: false, mobile: '', mobileVerified: false, passwordHash: null,
       role, status: 'Invited', active: true, profile: {}, communicationPreference: 'email', invitedBy: req.user.id,
+      ...(PARTNER_ROLES[role] ? { orgId } : {}),
     });
     const { secret } = createChallenge({ subjectId: rec.id, purpose: 'invite', destination: rec.emailLower, kind: 'link' });
-    audit(req.user, 'USER_INVITED', 'user', rec.id, { email: maskEmail(em), role });
+    audit(req.user, 'USER_INVITED', 'user', rec.id, { email: maskEmail(em), role, orgId: rec.orgId || null });
     return { u: rec, token: secret };
   });
-  res.status(201).json({ user: publicUser(u), ...(process.env.NODE_ENV !== 'production' ? { devInviteToken: token } : {}) });
+  res.status(201).json({ user: withOrg(u), ...(process.env.NODE_ENV !== 'production' ? { devInviteToken: token } : {}) });
 });
 
 r.patch('/users/:id', admin, (req, res) => {
@@ -53,6 +66,7 @@ r.patch('/users/:id', admin, (req, res) => {
   if (u.id === req.user.id && (active === false || (role && role !== 'admin'))) throw conflict('You cannot deactivate or demote your own account');
   if (role && (!ROLES.includes(role) || role === 'claimant')) throw bad('Invalid role');
   if (role && (u.role === 'customer') !== (role === 'customer')) throw bad('Customers and staff are separate account types; invite a new staff user instead.');
+  if (role && (PARTNER_ROLES[u.role] || null) !== (PARTNER_ROLES[role] || null)) throw bad('Partner users can only change roles within their own organisation type; invite a new user instead.');
   tx(() => {
     const before = { role: u.role, active: u.active };
     if (role) u.role = role;
@@ -66,7 +80,7 @@ r.patch('/users/:id', admin, (req, res) => {
     db.touch(u);
     audit(req.user, 'USER_UPDATED', 'user', u.id, { before, after: { role: u.role, active: u.active } });
   });
-  res.json(publicUser(u));
+  res.json(withOrg(u));
 });
 
 // ---------- plans & rate configuration ----------
@@ -142,7 +156,7 @@ r.post('/notifications/broadcast', admin, (req, res) => {
 });
 
 // ---------- audit logs ----------
-r.get('/audit-logs', admin, (req, res) => {
+r.get('/audit-logs', requireRole('admin', ...READ_ONLY_ROLES), (req, res) => {
   const { action, entityType, actor, entityId, limit = 300 } = req.query;
   const list = db.find('auditLogs', (a) =>
     (!action || a.action.includes(String(action).toUpperCase())) && (!entityType || a.entityType === entityType) &&
