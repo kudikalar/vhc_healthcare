@@ -29,6 +29,7 @@ import corporateRoutes from './routes/corporate.js';
 import enterpriseRoutes from './routes/enterprise.js';
 import './services/insurerHub.js'; // registers integration event handlers
 import { runStartupMigrations } from './services/seed.js';
+import { storeStatus } from './services/remoteStore.js';
 
 export function createApp() {
   load();
@@ -42,7 +43,7 @@ export function createApp() {
   // Authenticated data must never be served from a browser or proxy cache (e.g. after logout + Back).
   app.use('/api', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
-  app.get('/api/health', (req, res) => res.json({ ok: true, name: 'Vision Health Care API', time: now().toISOString() }));
+  app.get('/api/health', (req, res) => res.json({ ok: true, name: 'Vision Health Care API', time: now().toISOString(), store: storeStatus }));
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/dashboard', dashboardRoutes);

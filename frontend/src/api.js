@@ -38,10 +38,15 @@ async function request(method, path, body, { raw, quiet401 } = {}) {
     payload = JSON.stringify(body);
   }
   let res;
-  try {
-    res = await fetch(BASE + path, { method, headers, body: payload, credentials: 'include', cache: 'no-store' });
-  } catch {
-    throw new ApiError(0, { error: 'We could not reach the server. Check your connection and try again — it is safe to retry.' });
+  // A 503 STORE_BUSY means the server applied nothing, so the same request is safe to repeat.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      res = await fetch(BASE + path, { method, headers, body: payload, credentials: 'include', cache: 'no-store' });
+    } catch {
+      throw new ApiError(0, { error: 'We could not reach the server. Check your connection and try again — it is safe to retry.' });
+    }
+    if (res.status !== 503 || attempt >= 3 || body instanceof FormData) break;
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
   }
   if (raw && res.ok) return res;
   const data = (res.headers.get('content-type') || '').includes('json') ? await res.json() : null;

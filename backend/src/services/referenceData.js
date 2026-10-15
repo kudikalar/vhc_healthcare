@@ -153,6 +153,6 @@ export function ensureReferenceData({ fresh = false } = {}) {
   meta().mockInsurer ||= { issuanceMode: 'auto' };
   const ctx = { fresh, createdUsers, demo: DEMO_ACCOUNTS_ENABLED() };
   for (const [, step] of AREA_STEPS) step(ctx);
-  meta().referenceDataAt = now().toISOString();
+  meta().referenceDataAt ||= now().toISOString(); // first run only, so repeat runs change nothing
   return ctx;
 }

@@ -4,6 +4,8 @@ import { api, ApiError } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import { Alert, ErrorBox, Field, useAction, useLoad } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import CoverMeter from '../../components/CoverMeter.jsx';
+import { money } from '../../format.js';
 import { LegalNote, useT } from '../enterprise/i18n.jsx';
 import '../enterprise/enterprise.css';
 
@@ -61,6 +63,34 @@ const CITIES = ['Bengaluru', 'Chennai', 'Delhi', 'Hyderabad', 'Kolkata', 'Mumbai
 const SUMS = [[500000, '₹5 lakh'], [1000000, '₹10 lakh'], [1500000, '₹15 lakh'], [2500000, '₹25 lakh'], [5000000, '₹50 lakh'], [10000000, '₹1 crore']];
 const INTERESTS = [['health_individual', 'Health insurance for me'], ['health_family', 'Family health insurance'], ['senior', 'Senior citizen cover'], ['corporate', 'Group / corporate cover'], ['claims_help', 'Help with a claim'], ['other', 'Something else']];
 
+/** The home page's one memorable element: how a shared family floater is actually used up. */
+function HeroMeter() {
+  const t = useT();
+  const L = 100000 * 100;
+  const family = [
+    ['AR', 'Anil', 'self', null],
+    ['KR', 'Kavya', 'spouse', ['paid', 120000 * 100, 'Dengue — hospitalised 4 days']],
+    ['IR', 'Ira', 'child', null],
+    ['SR', 'Shanta', 'mother', ['held', 85000 * 100, 'Cataract surgery — cashless pre-authorised']],
+  ];
+  return (
+    <div className="hero-meter">
+      <header><strong>{t('Family floater, ₹10 lakh')}</strong><span>{t('Illustrative example')}</span></header>
+      <CoverMeter total={10 * L} paid={120000 * 100} reserved={85000 * 100} sharedBy={4} size="lg" animate />
+      <ul className="hero-family" aria-label={t('Who is covered')}>
+        {family.map(([ini, name, rel, claim]) => (
+          <li key={name}>
+            <span className="avatar" aria-hidden="true">{ini}</span>
+            <span>{name} <span className="muted">· {t(rel)}</span>{claim && <span className={`note ${claim[0] === 'held' ? 'held' : ''}`}>{claim[2]}</span>}</span>
+            <span className="amt">{claim ? `${claim[0] === 'held' ? t('held') : t('paid')} ${money(claim[1])}` : '—'}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="muted" style={{ fontSize: '.86rem', margin: '1rem 0 0' }}>{t('One sum insured covers all four. Each claim reduces what is left for everyone until renewal — VHC shows this on every family policy.')}</p>
+    </div>
+  );
+}
+
 function Estimate() {
   const t = useT();
   const nav = useNavigate();
@@ -68,15 +98,17 @@ function Estimate() {
   const ok = Number(f.age) >= 18 && Number(f.age) <= 99;
   return (
     <form className="lpx-estimate" aria-labelledby="est-h" onSubmit={(e) => { e.preventDefault(); if (ok) nav(`/quote?${new URLSearchParams({ product: 'health', ...f })}`); }}>
-      <h2 id="est-h">{t('Quick premium estimate')}</h2>
+      <div>
+        <h2 id="est-h">{t('Quick premium estimate')}</h2>
+        <p className="hint2" style={{ margin: 0 }}>{t('Calculated on the next page with the insurer\'s rating rules. Nothing you enter here is stored.')}</p>
+      </div>
       <div className="form-grid">
         <Field label={t('Age of eldest member')}><input type="number" min="18" max="99" inputMode="numeric" value={f.age} onChange={(e) => setF({ ...f, age: e.target.value })} aria-invalid={!ok} /></Field>
         <Field label={t('Members')}><select value={f.members} onChange={(e) => setF({ ...f, members: e.target.value })}>{[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}</select></Field>
         <Field label={t('City')}><select value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })}>{CITIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
         <Field label={t('Sum insured')}><select value={f.sumInsured} onChange={(e) => setF({ ...f, sumInsured: e.target.value })}>{SUMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <button className="btn" disabled={!ok}>{t('See my estimate')}</button>
       </div>
-      <button className="btn block" style={{ marginTop: '1rem' }} disabled={!ok}>{t('See my estimate')}</button>
-      <p className="hint2">{t('Estimates are calculated by the insurer\'s rating rules on the next page. No personal data is stored.')}</p>
     </form>
   );
 }
@@ -158,8 +190,10 @@ export default function Landing() {
             <div className="lpx-hero-ctas">
               <Link className="btn lg" to="/plans">{t('Find health insurance')}</Link>
               <Link className="btn lg ghost-light" to="/plans">{t('Compare plans')}</Link>
-              <Link className="btn lg ghost-light" to="/hospitals">{t('Find a hospital')}</Link>
-              <a className="btn lg ghost-light" href="#callback">{t('Request a callback')}</a>
+            </div>
+            <div className="lp-hero-links">
+              <Link to="/hospitals">{t('Find a hospital')}</Link>
+              <a href="#callback">{t('Request a callback')}</a>
             </div>
             <ul className="lp-ticks">
               <li><Icon name="scale" size={18} /> {t('No commission-based ranking')}</li>
@@ -167,19 +201,24 @@ export default function Landing() {
               <li><Icon name="shield" size={18} /> {t('Insurer named on every product')}</li>
             </ul>
           </div>
-          <Estimate />
+          <HeroMeter />
         </div>
+      </section>
+
+      <section className="estimate-band" aria-label={t('Quick premium estimate')}>
+        <div className="lp-container"><Estimate /></div>
       </section>
 
       <section id="categories" className="lp-section" aria-labelledby="cat-h">
         <div className="lp-container">
-          <div className="lp-head"><span className="eyebrow">{t('Health insurance')}</span><h2 id="cat-h">{t('Health insurance categories')}</h2><p>Pick a category to see matching products. Product availability depends on the insurers published on the platform.</p></div>
+          <div className="lp-head"><h2 id="cat-h">{t('Health insurance categories')}</h2><p>Pick a category to see matching products. Product availability depends on the insurers published on the platform.</p></div>
           <div className="lpx-cats">
             {CATEGORIES.map(([cat, label, icon, text]) => (
               <Link key={cat} className="lpx-cat" to={`/plans?category=${cat}`}>
                 <span className="ic"><Icon name={icon} /></span>
                 <h3>{t(label)}</h3>
                 <p>{text}</p>
+                <span className="cat-go">{t('See plans')}</span>
               </Link>
             ))}
           </div>
@@ -189,7 +228,7 @@ export default function Landing() {
       <section id="compare" className="lp-section lp-alt" aria-labelledby="ins-h">
         <div className="lp-container">
           <div className="lp-head row between" style={{ alignItems: 'flex-end' }}>
-            <div><span className="eyebrow">{t('Compare')}</span><h2 id="ins-h">{t('Insurer catalogue')}</h2><p>Only insurers with a published listing appear here. Sandbox entities are synthetic and clearly labelled.</p></div>
+            <div><h2 id="ins-h">{t('Insurer catalogue')}</h2><p>Only insurers with a published listing appear here. Sandbox entities are synthetic and clearly labelled.</p></div>
             <Link className="btn secondary" to="/plans">{t('Compare plans')}</Link>
           </div>
           <Insurers />
@@ -199,14 +238,14 @@ export default function Landing() {
       <section className="lp-section lpx-light" aria-labelledby="why-h">
         <div className="lp-container lpx-two">
           <div>
-            <span className="eyebrow">{t('Why VHC')}</span>
+            
             <h2 id="why-h">{t('Why VHC')}</h2>
             <div className="lp-principles">
               {WHY.map(([ic, title, d]) => <div key={title} className="principle"><span className="ic"><Icon name={ic} /></span><div><strong>{title}</strong><p>{d}</p></div></div>)}
             </div>
           </div>
           <div>
-            <span className="eyebrow">{t('How buying works')}</span>
+            
             <h2>{t('How buying works')}</h2>
             <ol className="lpx-steps">{BUY_STEPS.map(([title, d]) => <li key={title}><strong>{title}</strong><span>{d}</span></li>)}</ol>
           </div>
@@ -216,7 +255,7 @@ export default function Landing() {
       <section id="hospitals" className="lp-section lp-alt" aria-labelledby="hos-h">
         <div className="lp-container lpx-two">
           <div>
-            <span className="eyebrow">{t('Partner hospitals')}</span>
+            
             <h2 id="hos-h">{t('Cashless hospital search')}</h2>
             <p>Find hospitals in your insurer's cashless network by city and specialty. A listing means the hospital can request cashless authorisation — it is not a guarantee of approval. Hospitals shown on this staging site are fictional.</p>
           </div>
@@ -233,7 +272,7 @@ export default function Landing() {
       <section id="claims" className="lp-section" aria-labelledby="clm-h">
         <div className="lp-container lpx-two">
           <div>
-            <span className="eyebrow">{t('Claims assistance')}</span>
+            
             <h2 id="clm-h">{t('How we help with claims')}</h2>
             <p>Claims are decided by the insurer (or its TPA). VHC helps you file complete claims, track them and understand every deduction.</p>
             <div className="row"><Link className="btn" to="/support#claim-help">{t('Claim help')}</Link><Link className="btn secondary" to="/life-claim">{t('Report a life claim')}</Link></div>
@@ -245,13 +284,13 @@ export default function Landing() {
       <section id="services" className="lp-section lp-alt" aria-labelledby="svc-h">
         <div className="lp-container lpx-two">
           <div>
-            <span className="eyebrow">{t('Health services')}</span>
+            
             <h2 id="svc-h">{t('Health services booking')}</h2>
             <p>Book consultations, diagnostics and health check-ups with partner providers. Service fees, where charged, are shown before you confirm and are separate from insurance premium.</p>
             <Link className="btn secondary" to="/services">{t('Health services')}</Link>
           </div>
           <div id="corporate">
-            <span className="eyebrow">{t('Corporate insurance')}</span>
+            
             <h2>{t('For employers')}</h2>
             <p>Group medical cover administration: employee enrolment, dependants, endorsements and claims support, with HR seeing only aggregate information — never an employee's medical details.</p>
             <div className="row"><Link className="btn secondary" to="/benefits">{t('Employee benefits')}</Link><a className="btn ghost" href="#callback">{t('Request a callback')}</a></div>
@@ -261,7 +300,7 @@ export default function Landing() {
 
       <section className="lp-section" aria-labelledby="edu-h">
         <div className="lp-container">
-          <div className="lp-head"><span className="eyebrow">Guides</span><h2 id="edu-h">{t('Learn about health insurance')}</h2></div>
+          <div className="lp-head"><h2 id="edu-h">{t('Learn about health insurance')}</h2></div>
           <div className="lpx-articles">
             {(kb.data || []).map((a) => <Link key={a.slug} className="lpx-cat" to={`/support/kb/${a.slug}`}><span className="ent-pill">{a.category}</span><h3>{a.title}</h3><p>{a.summary}</p></Link>)}
           </div>
@@ -273,7 +312,7 @@ export default function Landing() {
       <section id="contact" className="lp-section lp-alt" aria-labelledby="ct-h">
         <div className="lp-container lpx-two">
           <div id="about">
-            <span className="eyebrow">{t('About VHC')}</span>
+            
             <h2>{t('About VHC')}</h2>
             <p>{c?.role || 'VHC is a technology platform. Insurance is solicited and issued only by the licensed entities named on each product.'}</p>
             <h2 id="ct-h" style={{ marginTop: '1.5rem' }}>{t('Contact & support')}</h2>
