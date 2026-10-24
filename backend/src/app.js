@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
+import { openapiSpec } from './openapi.js';
 import { load } from './db.js';
 import { now } from './clock.js';
 import { errorHandler } from './utils/errors.js';
@@ -34,6 +36,11 @@ export function createApp() {
   app.use('/api', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
   app.get('/api/health', (req, res) => res.json({ ok: true, name: 'Vision Health Care API', time: now().toISOString() }));
+
+  // API documentation: raw OpenAPI spec and interactive Swagger UI.
+  app.get('/api/openapi.json', (req, res) => res.json(openapiSpec));
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, { customSiteTitle: 'Vision Health Care API docs' }));
+
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/dashboard', dashboardRoutes);
