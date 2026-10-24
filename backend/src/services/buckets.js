@@ -3,7 +3,7 @@ import { today } from '../clock.js';
 import { addDays } from '../utils/dates.js';
 import { policyStatusAt } from './lifecycle.js';
 
-export const CLOSED_APP = ['Issued', 'Rejected', 'Offer Declined'];
+export const CLOSED_APP = ['Issued', 'Rejected', 'Offer Declined', 'Declined by Insurer'];
 export const CLOSED_CLAIM = ['Settled', 'Rejected', 'Preauth Rejected'];
 export const DUE_WINDOW_DAYS = 30;
 

@@ -6,8 +6,11 @@ import { db } from '../db.js';
 import { now, today } from '../clock.js';
 import { AppError, bad, conflict, forbidden, notFound } from '../utils/errors.js';
 import { sum } from '../utils/money.js';
-import { APP_STATUS, issuePolicy, policyStatusAt, transition } from './lifecycle.js';
+import { APP_STATUS, policyStatusAt, transition } from './lifecycle.js';
 import { audit, notify, raiseException } from './audit.js';
+import { newCorrelationId, publish } from './events.js';
+import { distributionStatus } from './insurerHub.js';
+import { post as postLedger } from './ledger.js';
 
 function uniqueRef(prefix, col) {
   let ref;
@@ -28,7 +31,11 @@ export function resolvePaymentTarget(user, body) {
     const app = db.get('applications', body.applicationId);
     if (!app || (user.role === 'customer' && app.userId !== user.id)) throw notFound('Application not found');
     if (app.status === APP_STATUS.ISSUED) throw conflict('This application has already been paid and the policy issued');
+    if (app.status === APP_STATUS.ISSUANCE_PENDING) throw conflict('Payment has already been received; the insurer is confirming issuance');
     if (app.status !== APP_STATUS.ACCEPTED) throw conflict('Payment is available only after you accept the approved offer');
+    // The product must still be distributable (insurer active, agreement valid) at the moment of payment.
+    const dist = distributionStatus(db.get('plans', app.planId));
+    if (!dist.allowed) throw conflict(`This product is not available for purchase right now: ${dist.reason}`);
     return { targetKey: `app:${app.id}`, amount: app.offer.firstPayment, userId: app.userId, applicationId: app.id, description: `First premium for ${app.applicationNumber}` };
   }
   const policy = db.get('policies', body.policyId);
@@ -68,6 +75,8 @@ export function initiatePayment(user, body, actor = user) {
   const payment = db.insert('payments', {
     reference: uniqueRef('PAY', 'payments'), ...target, purpose: body.purpose, status: 'pending',
     idempotencyKey: body.idempotencyKey, method: body.method || 'simulated-gateway', callbacks: [], initiatedBy: actor?.id,
+    correlationId: newCorrelationId(), mode: process.env.PAYMENT_MODE === 'live' ? 'live' : 'test',
+    insurerId: target.applicationId ? db.get('plans', db.get('applications', target.applicationId)?.planId)?.insurerId || null : db.get('policies', target.policyId)?.insurerId || null,
   });
   audit(actor, 'PAYMENT_INITIATED', 'payment', payment.id, { reference: payment.reference, amount: payment.amount, purpose: payment.purpose });
   return { payment, replayed: false };
@@ -77,7 +86,10 @@ function applyPaymentEffect(payment, actor) {
   if (payment.purpose === 'application') {
     const app = db.get('applications', payment.applicationId);
     if (app.status !== APP_STATUS.ACCEPTED) return 'Application is no longer awaiting payment';
-    issuePolicy(app, payment, actor);
+    // Payment confirmation does not issue a policy. The proposal now waits for the insurer's decision,
+    // requested by the PAYMENT_CAPTURED handler in insurerHub.js.
+    app.paymentRef = payment.reference;
+    transition(app, APP_STATUS.ISSUANCE_PENDING, actor, `Payment ${payment.reference} confirmed. Awaiting insurer issuance.`);
     return null;
   }
   const policy = db.get('policies', payment.policyId);
@@ -121,6 +133,7 @@ export function processPaymentCallback({ reference, status, amount }, actor = { 
     payment.failureReason = 'Declined by simulated gateway';
     payment.completedAt = now().toISOString();
     audit(actor, 'PAYMENT_FAILED', 'payment', payment.id, { reference });
+    publish('PAYMENT_FAILED', { paymentId: payment.id }, { correlationId: payment.correlationId, idempotencyKey: `failed:${payment.id}`, actor, subject: { type: 'payment', id: payment.id } });
     notify(payment.userId, 'Payment failed', `Payment ${reference} for ${payment.description} failed. You can retry.`, { type: 'error' });
     if (payment.autoPay) raiseException('autopay_failed', payment.id, 'Automatic premium collection failed', { reference });
     return { payment, duplicate: false };
@@ -142,6 +155,8 @@ export function processPaymentCallback({ reference, status, amount }, actor = { 
   } else {
     payment.status = 'success';
     audit(actor, 'PAYMENT_SUCCEEDED', 'payment', payment.id, { reference, amount: payment.amount, purpose: payment.purpose });
+    db.touch(payment);
+    publish('PAYMENT_CAPTURED', { paymentId: payment.id }, { correlationId: payment.correlationId, idempotencyKey: `captured:${payment.id}`, actor, subject: { type: 'payment', id: payment.id } });
   }
   db.touch(payment);
   return { payment, duplicate: false };
@@ -212,6 +227,7 @@ export function processPayoutCallback({ reference, status }, actor = { name: 'Ba
     claim.reservedAmount = 0;
     claim.paidAmount = payout.amount;
     transition(claim, 'Settled', actor, `Paid ${payout.amount} paise via ${reference}`);
+    publish('CLAIM_SETTLED', { claimId: claim.id, claimNumber: claim.claimNumber, paidAmount: payout.amount, payoutReference: reference }, { idempotencyKey: `claim-settled:${claim.id}`, actor, subject: { type: 'healthClaim', id: claim.id } });
     notify(claim.userId, 'Claim settled', `Claim ${claim.claimNumber} has been settled.`, { type: 'success', link: `/claims/${claim.id}` });
   } else {
     const claim = db.get('lifeClaims', payout.claimId);
@@ -230,6 +246,11 @@ export function processPayoutCallback({ reference, status }, actor = { name: 'Ba
       transition(claim, 'Partially Paid', actor, `Paid ${ben.name}`);
     }
   }
+  const pol = db.get('policies', payout.policyId);
+  postLedger({
+    ledger: 'claim_payout', direction: 'credit', amount: payout.amount, description: `Claim ${payout.claimNumber} paid to ${payout.payee?.name}`,
+    refType: 'payout', refId: payout.id, reference, insurerId: pol?.insurerId, userId: pol?.userId, idempotencyKey: `payout:${payout.id}`,
+  });
   audit(actor, 'PAYOUT_SUCCEEDED', 'payout', payout.id, { reference, amount: payout.amount });
   return { payout, duplicate: false };
 }

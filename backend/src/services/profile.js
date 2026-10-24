@@ -48,6 +48,7 @@ export function publicUser(u, { masked = false } = {}) {
     communicationPreference: u.communicationPreference || 'email', marketingOptIn: !!u.marketingOptIn,
     profileVersion: u.profileVersion || 1, createdAt: u.createdAt, lastLoginAt: u.lastLoginAt || null,
     checklist: u.role === 'customer' ? profileChecklist(u) : undefined,
+    username: u.username || null, orgId: u.orgId || null, qaFixture: !!u.qaFixture,
   };
 }
 

@@ -1,7 +1,7 @@
 // Fictional, repeatable seed data. All people, hospitals and products are invented.
 import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
-import { db, emptyState, persist, replaceState, STORAGE_DIR } from '../db.js';
+import { db, emptyState, persist, replaceState, STORAGE_DIR, tx } from '../db.js';
 import { now, today } from '../clock.js';
 import { addDays, addMonths, addYears } from '../utils/dates.js';
 import { computeHealthQuote, computeLifeQuote, hashInputs, healthQuoteInputs, lifeQuoteInputs } from './pricing.js';
@@ -9,6 +9,8 @@ import { APP_STATUS, issuePolicy } from './lifecycle.js';
 import { createApplication } from '../routes/applications.js';
 import { newCustomerId, TERMS_VERSION } from './profile.js';
 import { resetIpThrottle } from './security.js';
+import { DEMO_USERNAMES, ensureReferenceData } from './referenceData.js';
+import { SANDBOX_INSURER_ID } from './insurerHub.js';
 
 export const SEED_PASSWORD = 'VisionDemo#2026';
 const L = 100; // paise per rupee
@@ -189,7 +191,7 @@ export function resetAndSeed() {
   db.get('users', 'usr_cust2').profile = { dob: '1979-11-02', gender: 'male', address: { line1: '9 Rose Lane, Koregaon Park', line2: '', city: 'Pune', state: 'Maharashtra', postalCode: '411001', country: 'India' } };
 
   for (const p of PLANS) {
-    db.insert('plans', { id: p.id, code: p.code, name: p.name, product: p.product, type: p.type, description: p.description, active: true, versions: [{ version: 1, config: p.config, createdAt: now().toISOString(), createdBy: 'Seed', changeNote: 'Initial version' }] });
+    db.insert('plans', { id: p.id, code: p.code, name: p.name, product: p.product, type: p.type, description: p.description, active: true, insurerId: SANDBOX_INSURER_ID, insurerName: 'VHC Sandbox Insurer (Synthetic)', sandbox: true, versions: [{ version: 1, config: p.config, createdAt: now().toISOString(), createdBy: 'Seed', changeNote: 'Initial version' }] });
   }
   HOSPITALS.forEach(([name, address, city, state, postalCode, specialties, network], i) => {
     db.insert('hospitals', { id: `hsp_${i + 1}`, name, address, city, state, postalCode, specialties, network, active: true, phone: `044-4000${String(i).padStart(4, '0')}`, email: `contact${i + 1}@hospital.test` });
@@ -246,6 +248,45 @@ export function resetAndSeed() {
     status: 'Submitted', preauth: null, assessment: null, reservedAmount: 0, paidAmount: 0, documentRequests: [], internalNotes: [],
     timeline: [{ at: now().toISOString(), status: 'Submitted', by: 'Asha Verma', role: 'customer', note: 'Reimbursement claim submitted' }],
   });
+  ensureReferenceData({ fresh: true });
+  ensureDemoPolicies();
   persist();
-  return { users: USERS.map(([, , , email, role]) => ({ email, role, password: SEED_PASSWORD })) };
+  return {
+    users: [
+      ...USERS.map(([, , , email, role]) => ({ email, role, password: SEED_PASSWORD })),
+      ...DEMO_USERNAMES.map((u) => ({ username: u, email: `${u}@vhc.test`, role: db.findOne('users', (x) => x.username === u)?.role, password: SEED_PASSWORD })).filter((u) => u.role),
+    ],
+  };
+}
+
+/** Demo policies for the QA accounts (idempotent: only when the account exists and has no policy yet). */
+export function ensureDemoPolicies() {
+  const meera = db.get('users', 'usr_meera');
+  if (meera && !db.findOne('policies', (p) => p.userId === meera.id)) {
+    const decl = { hasConditions: false, conditions: '', medications: 'None', surgeries: 'None', tobacco: false };
+    seedPolicy(meera.id, db.get('plans', 'pln_health_floater'), (app) => {
+      app.health = {
+        coverage: 10 * LAKH, optionalBenefits: ['MATERNITY'],
+        members: [
+          { id: 'mem_meera', fullName: 'Meera Reddy', dob: '1984-02-09', relationship: 'self', gender: 'female', heightCm: 160, weightKg: 60, ...decl },
+          { id: 'mem_suresh', fullName: 'Suresh Reddy', dob: '1981-07-22', relationship: 'spouse', gender: 'male', heightCm: 172, weightKg: 74, ...decl },
+          { id: 'mem_anika', fullName: 'Anika Reddy', dob: '2013-05-30', relationship: 'child', gender: 'female', heightCm: 140, weightKg: 32, ...decl },
+          { id: 'mem_lakshmi', fullName: 'Lakshmi Rao', dob: '1963-11-03', relationship: 'parent', gender: 'female', heightCm: 155, weightKg: 62, ...decl },
+        ],
+      };
+    }, addDays(today(), -200));
+    for (const [fullName, dob, relationship, gender] of [['Suresh Reddy', '1981-07-22', 'spouse', 'male'], ['Anika Reddy', '2013-05-30', 'child', 'female'], ['Lakshmi Rao', '1963-11-03', 'parent', 'female']]) {
+      db.insert('familyMembers', { userId: meera.id, fullName, dob, relationship, gender, status: 'active', version: 1 });
+    }
+  }
+}
+
+/** Non-destructive start-up migration for existing databases (adds new platform data only). */
+export function runStartupMigrations() {
+  if (db.all('users').length === 0) return null;
+  return tx(() => {
+    const ctx = ensureReferenceData();
+    ensureDemoPolicies();
+    return ctx;
+  });
 }

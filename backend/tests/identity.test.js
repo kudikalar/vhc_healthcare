@@ -21,7 +21,7 @@ test('M01-AC01/AC02: one Pending Verification account + consent; repeats do not 
   const r1 = await register(valid());
   assert.equal(r1.status, 202);
   assert.equal(r1.body.message, NEUTRAL);
-  const users = (await s.api('GET', '/admin/users?q=priya', { token: s.tokens.admin })).body;
+  const users = (await s.api('GET', '/admin/users?q=priya.sharma', { token: s.tokens.admin })).body;
   assert.equal(users.length, 1);
   assert.equal(users[0].status, 'Pending Verification');
   assert.equal(users[0].email, 'Priya.Sharma@Example.test', 'original display value preserved');
@@ -31,7 +31,7 @@ test('M01-AC01/AC02: one Pending Verification account + consent; repeats do not 
   assert.equal(r2.status, 202);
   assert.equal(r2.body.message, NEUTRAL);
   assert.equal(r2.body.devVerificationToken, undefined);
-  assert.equal((await s.api('GET', '/admin/users?q=priya', { token: s.tokens.admin })).body.length, 1);
+  assert.equal((await s.api('GET', '/admin/users?q=priya.sharma', { token: s.tokens.admin })).body.length, 1);
   const existing = await register(valid({ email: 'customer@vhc.test' }));
   assert.equal(existing.status, 202);
   assert.equal(existing.body.message, NEUTRAL, 'existing email gets the same neutral response');

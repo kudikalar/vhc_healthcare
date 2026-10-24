@@ -1,3 +1,4 @@
+import CoverMeter from '../../components/CoverMeter.jsx';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
@@ -203,20 +204,10 @@ function PersonCard({ p, onEdit, onRemove }) {
 
 export function SharedCover({ pol }) {
   const b = pol.balance;
-  const pct = (v) => `${b.total ? (v / b.total) * 100 : 0}%`;
   return (
     <Card title={<span>{pol.planName} <small className="muted">· {pol.policyNumber}</small></span>} actions={<Link to={`/policies/${pol.id}`}>Details</Link>}>
-      <div className="row between">
-        <div><span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{money(b.available)}</span> <small>available of {money(b.total)}</small></div>
-        <span className="chip neutral">Shared by {pol.members?.length || 1}</span>
-      </div>
-      <div className="stacked-meter" role="img" aria-label={`${money(b.paid)} settled, ${money(b.reserved)} reserved, ${money(b.available)} available`}>
-        <span className="paid" style={{ width: pct(b.paid) }} />
-        <span className="reserved" style={{ width: pct(b.reserved) }} />
-        <span className="avail" style={{ width: pct(b.available) }} />
-      </div>
-      <div className="legend"><span><i style={{ background: 'var(--brand)' }} />Available</span><span><i style={{ background: '#f5b83d' }} />Reserved for open claims</span><span><i style={{ background: 'var(--navy-2)' }} />Settled</span></div>
-      <small style={{ display: 'block', marginTop: '.5rem' }}>Cover {date(pol.startDate)} – {date(pol.endDate)}</small>
+      <CoverMeter total={b.total} paid={b.paid} reserved={b.reserved} sharedBy={pol.members?.length || 1} />
+      <small style={{ display: 'block', marginTop: '.75rem' }}>Cover {date(pol.startDate)} – {date(pol.endDate)}</small>
     </Card>
   );
 }

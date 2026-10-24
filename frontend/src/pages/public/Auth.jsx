@@ -7,8 +7,20 @@ import { AuthBrandPanel, PasswordField, useCountdown } from '../../components/Au
 
 const DEMO_PASSWORD = 'VisionDemo#2026';
 const DEMO = [
-  ['customer@vhc.test', 'Customer'], ['customer2@vhc.test', 'Customer 2'], ['agent@vhc.test', 'Agent'], ['underwriter@vhc.test', 'Underwriter'],
-  ['claims@vhc.test', 'Claims officer'], ['claims2@vhc.test', 'Claims officer 2'], ['admin@vhc.test', 'Admin'],
+  ['customer@vhc.test', 'Customer (Asha)'],
+  ['customer2@vhc.test', 'Customer (Rahul)'],
+  ['agent@vhc.test', 'Agent'],
+  ['underwriter@vhc.test', 'Underwriter'],
+  ['claims@vhc.test', 'Claims officer'],
+  ['claims2@vhc.test', 'Claims officer 2'],
+  ['admin@vhc.test', 'Admin'],
+];
+// Enterprise QA fixtures (sign in with the username or username@vhc.test).
+const QA = [
+  ['vhc_superadmin', 'Super admin'], ['customer_arjun', 'Customer (Arjun)'], ['family_meera', 'Family policyholder'],
+  ['insurance_neha', 'Insurer partner'], ['hospital_rahul', 'Hospital admin'], ['tpa_kiran', 'TPA agent'],
+  ['corporate_sana', 'Corporate HR'], ['claims_priya', 'Claims coordinator'], ['finance_vikram', 'Finance'],
+  ['support_ishaan', 'Support agent'], ['compliance_ananya', 'Compliance'], ['auditor_dev', 'Auditor'],
 ];
 
 // Client-side checks mirror the server rules; the server remains authoritative.
@@ -38,7 +50,7 @@ export function Login() {
   const submit = (e) => {
     e.preventDefault();
     const fe = {};
-    if (!emailOk(form.email)) fe.email = 'Enter a valid email address.';
+    if (!emailOk(form.email) && !/^[a-z0-9_.-]{3,40}$/i.test(form.email.trim())) fe.email = 'Enter your email address or username.';
     if (!form.password) fe.password = 'Enter your password.';
     setErrs(fe);
     if (Object.keys(fe).length) return;
@@ -69,8 +81,8 @@ export function Login() {
             )}
             {unverified && <Alert kind="warn">Verify your email address before signing in. <Link to={`/verify-email?email=${encodeURIComponent(form.email)}`}>Resend the link</Link></Alert>}
             <form onSubmit={submit} className="stack" noValidate>
-              <Field label="Email address" error={errs.email}>
-                <input type="email" autoComplete="username" maxLength={254} placeholder="you@example.com" value={form.email} aria-invalid={!!errs.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <Field label="Email address or username" error={errs.email}>
+                <input type="text" inputMode="email" autoCapitalize="none" autoComplete="username" maxLength={254} placeholder="you@example.com" value={form.email} aria-invalid={!!errs.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
               </Field>
               <PasswordField label="Password" placeholder="Enter your password" value={form.password} error={errs.password} onChange={(password) => setForm({ ...form, password })} />
               <div className="row between">
@@ -87,7 +99,11 @@ export function Login() {
             <div className="demo-grid">
               {DEMO.map(([email, label]) => <button key={email} type="button" className="btn sm secondary" onClick={() => setForm({ ...form, email, password: DEMO_PASSWORD })}>{label}</button>)}
             </div>
-            <p className="muted" style={{ marginBottom: 0, fontSize: '.84rem' }}>Password: <code>{DEMO_PASSWORD}</code>. Claimants use <Link to="/life-claim">Report a life claim</Link> instead.</p>
+            <div className="divider-text">Enterprise QA accounts</div>
+            <div className="demo-grid">
+              {QA.map(([u, label]) => <button key={u} type="button" className="btn sm secondary" onClick={() => setForm({ ...form, email: u, password: DEMO_PASSWORD })}>{label}</button>)}
+            </div>
+            <p className="muted" style={{ marginBottom: 0, fontSize: '.84rem' }}>Password: <code>{DEMO_PASSWORD}</code> (synthetic QA fixtures — never used in production). Claimants use <Link to="/life-claim">Report a life claim</Link> instead.</p>
           </Card>
         </div>
       </div>

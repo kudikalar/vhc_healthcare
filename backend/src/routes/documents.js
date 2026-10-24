@@ -2,14 +2,16 @@
 // through authorised, audited endpoints. Content is validated by magic bytes.
 import { Router } from 'express';
 import multer from 'multer';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db, newId, STORAGE_DIR, tx } from '../db.js';
-import { authenticate } from '../middleware/auth.js';
-import { bad } from '../utils/errors.js';
+import { authenticate, READ_ONLY_ROLES } from '../middleware/auth.js';
+import { bad, forbidden } from '../utils/errors.js';
 import { assertDocumentAccess, assertEntityAccess, MEDICAL_CATEGORIES } from '../services/access.js';
 import { audit } from '../services/audit.js';
 import { loadBlob, saveBlob } from '../services/remoteStore.js';
+import { runFraudRules } from '../services/claimsOpsFraud.js';
 
 const r = Router();
 export const MAX_BYTES = 5 * 1024 * 1024;
@@ -27,6 +29,7 @@ r.use(authenticate);
 
 r.post('/', upload.single('file'), async (req, res) => {
   const { entityType, entityId, category = 'other', description = '' } = req.body || {};
+  if (READ_ONLY_ROLES.includes(req.user.role)) throw forbidden('Read-only oversight roles cannot upload documents');
   if (!req.file) throw bad('A file is required');
   if (!CATEGORIES.includes(category)) throw bad(`category must be one of ${CATEGORIES.join(', ')}`);
   assertEntityAccess(req.user, entityType, entityId);
@@ -39,9 +42,12 @@ r.post('/', upload.single('file'), async (req, res) => {
   const doc = tx(() => {
     const d = db.insert('documents', {
       id, entityType, entityId, category, description, filename: path.basename(req.file.originalname).slice(0, 120),
-      mime, size: req.file.size, uploadedBy: req.user.id, uploadedByName: req.user.name, uploadedByRole: req.user.role,
+      mime, size: req.file.size, sha256: crypto.createHash('sha256').update(req.file.buffer).digest('hex'),
+      uploadedBy: req.user.id, uploadedByName: req.user.name, uploadedByRole: req.user.role,
     });
     audit(req.user, 'DOCUMENT_UPLOADED', entityType, entityId, { documentId: id, category });
+    // Anomaly signals for human review only (e.g. the same file on another claim); never blocks the upload.
+    if (entityType === 'healthClaim') runFraudRules(db.get('healthClaims', entityId), 'document_upload');
     return d;
   });
   res.status(201).json(doc);

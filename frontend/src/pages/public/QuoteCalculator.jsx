@@ -12,11 +12,22 @@ export default function QuoteCalculator() {
   const [params] = useSearchParams();
   const plans = useLoad(() => api.get('/plans'));
   const [product, setProduct] = useState(params.get('product') === 'life' ? 'life' : 'health');
-  const [planId, setPlanId] = useState(params.get('plan') || '');
+  const [planId, setPlanId] = useState(params.get('plan') || (params.get('age') ? (Number(params.get('members')) > 1 ? 'pln_health_floater' : 'pln_health_individual') : ''));
   const { user } = useAuth();
   const nav = useNavigate();
 
-  const [h, setH] = useState({ coverage: '', optionalBenefits: [], startDate: tomorrow(), members: [{ fullName: '', dob: '', relationship: 'self' }] });
+  // Prefill from the landing-page estimate (?age=&members=&sumInsured= in rupees). Ages become approximate
+  // dates of birth that the customer can correct; nothing is submitted until they ask for a quote.
+  const prefill = (() => {
+    const age = Number(params.get('age'));
+    const count = Math.min(Math.max(Number(params.get('members')) || 1, 1), 6);
+    if (!(age >= 18 && age <= 99)) return null;
+    const dobFor = (a) => `${new Date().getUTCFullYear() - a - 1}-07-01`;
+    const rels = [['self', age], ['spouse', age], ['child', 8], ['child', 5], ['parent', age + 28], ['parent', age + 26]];
+    return rels.slice(0, count).map(([relationship, a]) => ({ fullName: '', dob: dobFor(a), relationship }));
+  })();
+  const wantedCover = Number(params.get('sumInsured')) > 0 ? Number(params.get('sumInsured')) * 100 : null;
+  const [h, setH] = useState({ coverage: '', optionalBenefits: [], startDate: tomorrow(), members: prefill || [{ fullName: '', dob: '', relationship: 'self' }] });
   const [l, setL] = useState({ dob: '', startDate: tomorrow(), sumAssured: params.get('sumAssured') || '5000000', policyTerm: 20, premiumPaymentTerm: 20, frequency: 'annual', tobacco: false, riders: [], annualIncome: '1200000' });
   const [quote, setQuote] = useState(null);
   const act = useAction();
@@ -31,7 +42,12 @@ export default function QuoteCalculator() {
     else setPlanId(list.find((x) => x.product === product)?.id || '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plans.data]);
-  useEffect(() => { if (plan?.product === 'health' && !h.coverage) setH((x) => ({ ...x, coverage: plan.config.coverageOptions[0].amount })); }, [plan]); // eslint-disable-line
+  useEffect(() => {
+    if (plan?.product !== 'health' || h.coverage) return;
+    const opts = plan.config.coverageOptions;
+    const pick = (wantedCover && (opts.find((c) => c.amount >= wantedCover) || opts[opts.length - 1])) || opts[0];
+    setH((x) => ({ ...x, coverage: pick.amount }));
+  }, [plan]); // eslint-disable-line
   useEffect(() => setQuote(null), [planId, h, l]);
 
   // Family roster: lets customers pick insured members instead of retyping them (/quote?family=id1,id2 prefills).
@@ -83,7 +99,7 @@ export default function QuoteCalculator() {
 
   return (
     <>
-      <PageHeader title="Quote calculator" subtitle="Prices are calculated on the server using the plan's configured (mock) rate tables." />
+      <PageHeader title="Quote calculator" subtitle="Prices are calculated on the server by the sandbox insurer rating engine (synthetic rates). Every quote gets a reference number and is valid for 7 days." />
       <Tabs value={product} onChange={(v) => { setProduct(v); setPlanId(list.find((x) => x.product === v)?.id || ''); }} tabs={[{ value: 'health', label: 'Health' }, { value: 'life', label: 'Term life' }]} />
       <div className="grid grid-2">
         <Card title="Your details">
@@ -179,7 +195,7 @@ export default function QuoteCalculator() {
               <QuoteBreakdown q={quote} />
               <hr />
               {user?.role === 'customer' ? (
-                <button className="btn" disabled={applyAct.busy} onClick={apply}>Apply with these details</button>
+                <button className="btn" disabled={applyAct.busy || quote.distribution?.allowed === false} onClick={apply}>Apply with these details</button>
               ) : !user ? <p><Link to="/login">Log in</Link> or <Link to="/register">register</Link> to apply.</p> : null}
               <ErrorBox error={applyAct.error} />
             </>

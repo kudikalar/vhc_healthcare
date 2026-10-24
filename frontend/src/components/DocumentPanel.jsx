@@ -1,17 +1,29 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { dateTime, titleCase } from '../format.js';
 import { Badge, Card, ErrorBox, Field, Table, useAction, useLoad } from './ui.jsx';
 
 const ALL = ['identity', 'income', 'medical_report', 'exam_report', 'bill', 'prescription', 'discharge_summary', 'death_certificate', 'claimant_id', 'entitlement_proof', 'bank_proof', 'other'];
 
-/** Upload/list/download documents attached to an application, policy or claim. */
-export default function DocumentPanel({ entityType, entityId, categories = ALL, canUpload = true, title = 'Documents' }) {
+/**
+ * Upload/list/download documents attached to an application, policy, claim or grievance.
+ * Optional: `preset` ({ categories, n }) pre-selects a document type and focuses the file input (e.g. from a
+ * "missing documents" checklist); `hints` maps document id → quality notes; `onUploaded` runs after upload.
+ */
+export default function DocumentPanel({ entityType, entityId, categories = ALL, canUpload = true, title = 'Documents', preset, hints, onUploaded }) {
   const docs = useLoad(() => api.get(`/documents?entityType=${entityType}&entityId=${entityId}`), [entityType, entityId]);
   const [category, setCategory] = useState(categories[0]);
   const [description, setDescription] = useState('');
   const fileRef = useRef();
   const act = useAction();
+
+  useEffect(() => {
+    if (!preset?.n) return;
+    const match = (preset.categories || []).find((c) => categories.includes(c));
+    if (match) setCategory(match);
+    fileRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    fileRef.current?.focus();
+  }, [preset?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upload = () => act.run(async () => {
     const file = fileRef.current?.files?.[0];
@@ -27,6 +39,7 @@ export default function DocumentPanel({ entityType, entityId, categories = ALL, 
     fileRef.current.value = '';
     setDescription('');
     docs.reload();
+    onUploaded?.();
   }, 'Document uploaded');
 
   return (
@@ -36,7 +49,7 @@ export default function DocumentPanel({ entityType, entityId, categories = ALL, 
         empty="No documents uploaded yet."
         columns={[
           { key: 'category', label: 'Type', render: (d) => titleCase(d.category) },
-          { key: 'filename', label: 'File', render: (d) => <>{d.filename}{d.description && <div className="muted">{d.description}</div>}</> },
+          { key: 'filename', label: 'File', render: (d) => <>{d.filename}{d.description && <div className="muted">{d.description}</div>}{hints?.[d.id]?.map((h, i) => <div key={i}><small style={{ color: 'var(--warn)' }}>⚠ {h}</small></div>)}</> },
           { key: 'by', label: 'Uploaded', render: (d) => <>{d.uploadedByName}<div className="muted">{dateTime(d.createdAt)}</div></> },
           { key: 'dl', label: '', render: (d) => d.restricted ? <Badge kind="warn">Restricted</Badge> : <button className="btn sm secondary" onClick={() => act.run(() => api.download(`/documents/${d.id}/download`, d.filename))}>Download</button> },
         ]}

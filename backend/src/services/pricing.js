@@ -8,6 +8,14 @@ export const hashInputs = (obj) => crypto.createHash('sha256').update(JSON.strin
 export const currentVersion = (plan) => plan.versions[plan.versions.length - 1];
 export const planVersion = (plan, v) => plan.versions.find((x) => x.version === v) || currentVersion(plan);
 
+/** GST on health and term-life premium (basis points). Sandbox premiums are quoted GST-inclusive. */
+export const GST_BP = 1800;
+/** Splits a GST-inclusive premium into its net premium and GST components (exact integer paise). */
+export function gstSplit(inclusive, bp = GST_BP) {
+  const netPremium = Math.round((inclusive * 10000) / (10000 + bp));
+  return { inclusive: true, gstBp: bp, netPremium, gst: inclusive - netPremium, total: inclusive };
+}
+
 const isYes = (v) => v === true;
 const filled = (s) => typeof s === 'string' && s.trim() && !/^(none|no|nil|na|n\/a)$/i.test(s.trim());
 
@@ -98,6 +106,7 @@ export function computeHealthQuote(plan, { members = [], coverage, optionalBenef
   const floaterDiscount = plan.type === 'floater' ? pct(multipliedPremium, cfg.floaterDiscountBp || 0) : 0;
   const optionalTotal = sum(optional, (o) => o.charge);
   const triggers = lines.flatMap((l) => l.underwritingTriggers.map((t) => `${l.fullName}: ${t}`));
+  const totalAnnualPremium = multipliedPremium - floaterDiscount + optionalTotal;
   return {
     product: 'health',
     planId: plan.id, planCode: plan.code, planName: plan.name, planType: plan.type, planVersion: version.version,
@@ -105,7 +114,8 @@ export function computeHealthQuote(plan, { members = [], coverage, optionalBenef
     basePremium, coverageMultiplierBp: cov.multiplierBp, multipliedPremium,
     floaterDiscountBp: plan.type === 'floater' ? cfg.floaterDiscountBp || 0 : 0, floaterDiscount,
     optionalBenefits: optional, optionalTotal,
-    totalAnnualPremium: multipliedPremium - floaterDiscount + optionalTotal,
+    totalAnnualPremium,
+    tax: gstSplit(totalAnnualPremium),
     underwritingRequired: triggers.length > 0,
     underwritingTriggers: triggers,
   };
@@ -198,6 +208,7 @@ export function computeLifeQuote(plan, input, opts = {}) {
     frequency, installmentsPerYear: freq.perYear, totalInstallments: premiumPaymentTerm * freq.perYear,
     uwClass, ratePer1000: rate.ratePer1000, units, basePremium, extraLoadingBp, loading,
     riders: riderLines, riderTotal, annualPremium, frequencyFactorBp: freq.factorBp, installmentPremium,
+    tax: gstSplit(annualPremium),
     medicalExamRequired: triggers.some((t) => t.startsWith('Medical')),
     underwritingRequired: triggers.length > 0,
     underwritingTriggers: triggers,

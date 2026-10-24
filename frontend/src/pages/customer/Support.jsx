@@ -3,9 +3,12 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth.jsx';
 import { Card, PageHeader } from '../../components/ui.jsx';
 import Icon from '../../components/Icon.jsx';
+import { useT } from '../enterprise/i18n.jsx';
+import { MyTickets, RoutesExplainer } from '../enterprise/SupportDesk.jsx';
 
 // Support and claim help. Human help never depends on an assistant; this page routes people to the
-// right journey. Formal grievances/appeals (VHC-M35) and support threads (M32) are later phases.
+// right journey. Support tickets (help desk) are distinct from formal grievances (/grievances) and from
+// complaints to the insurer or IRDAI (Bima Bharosa / Insurance Ombudsman) — the page says so explicitly.
 
 const FAQ = [
   ['Is a network hospital guaranteed to approve cashless treatment?', 'No. Being listed in the network means a hospital can request cashless authorisation. Each request is reviewed, and a pre-authorisation is provisional until the final bill is assessed.'],
@@ -18,6 +21,7 @@ const FAQ = [
 
 export default function Support() {
   const { user } = useAuth();
+  const t = useT();
   const loc = useLocation();
   useEffect(() => {
     if (loc.hash) document.getElementById(loc.hash.slice(1))?.scrollIntoView({ block: 'start' });
@@ -25,37 +29,37 @@ export default function Support() {
 
   return (
     <>
-      <PageHeader title="Support" subtitle="Claim help, answers to common questions and how to reach us." />
+      <PageHeader title={t('Support')} subtitle={t('Claim help, answers to common questions and how to reach us.')} actions={<Link className="btn secondary" to="/support/kb">{t('Knowledge base')}</Link>} />
 
       <div className="urgent" role="note">
         <Icon name="alert" size={22} />
-        <div><strong>In a medical emergency, get care first.</strong> Go to the nearest hospital or call your local emergency number. You don't need claim approval before urgent treatment; claims can be raised afterwards.</div>
+        <div><strong>{t('In a medical emergency, get care first.')}</strong> Call 112 (national emergency number) or go to the nearest hospital. You don't need claim approval before urgent treatment; claims can be raised afterwards.</div>
       </div>
 
       <section id="claim-help" aria-labelledby="claim-help-title">
-        <div className="section-title"><Icon name="claim" /><h2 id="claim-help-title">Claim help</h2></div>
+        <div className="section-title"><Icon name="claim" /><h2 id="claim-help-title">{t('Claim help')}</h2></div>
         <div className="help-grid">
           <Link className="help-card" to={user ? '/claims/new?type=cashless' : '/login'}>
             <span className="ic"><Icon name="hospital" /></span>
-            <h3>Planned hospital stay</h3>
+            <h3>{t('Planned hospital stay')}</h3>
             <p>Request cashless pre-authorisation at a network hospital before admission.</p>
             <span className="go">Request cashless →</span>
           </Link>
           <Link className="help-card" to={user ? '/claims/new' : '/login'}>
             <span className="ic"><Icon name="file" /></span>
-            <h3>Already paid the hospital</h3>
+            <h3>{t('Already paid the hospital')}</h3>
             <p>Claim reimbursement with your bills, prescriptions and discharge summary.</p>
             <span className="go">Start a reimbursement claim →</span>
           </Link>
           <Link className="help-card" to="/life-claim">
             <span className="ic"><Icon name="dove" /></span>
-            <h3>Report a death claim</h3>
+            <h3>{t('Report a death claim')}</h3>
             <p>For nominees and family. No login of the policyholder is needed.</p>
             <span className="go">Report a life claim →</span>
           </Link>
           <Link className="help-card" to={user ? '/claims' : '/login'}>
             <span className="ic"><Icon name="clipboard" /></span>
-            <h3>Track an existing claim</h3>
+            <h3>{t('Track an existing claim')}</h3>
             <p>See the current stage, who needs to act next and any documents we've asked for.</p>
             <span className="go">View my claims →</span>
           </Link>
@@ -63,7 +67,7 @@ export default function Support() {
       </section>
 
       <div className="grid grid-2" style={{ marginTop: '1rem' }}>
-        <Card title="How a health claim works">
+        <Card title={t('How a health claim works')}>
           <ol className="steps">
             <li><div><strong>Tell us about the treatment</strong>Choose the policy and insured member, the hospital and the dates.</div></li>
             <li><div><strong>Upload documents</strong>Bills, prescriptions, reports and the discharge summary.</div></li>
@@ -71,7 +75,7 @@ export default function Support() {
             <li><div><strong>Decision and payout</strong>You'll see the approved amount, every deduction with its reason, and payout status.</div></li>
           </ol>
         </Card>
-        <Card title="Documents to keep ready">
+        <Card title={t('Documents to keep ready')}>
           <ul className="checklist">
             {['Original hospital bills and payment receipts', 'Discharge summary', 'Prescriptions and pharmacy bills', 'Investigation and lab reports', 'Photo ID of the insured member', 'Bank details of the account to be paid (verified before payout)'].map((t) => (
               <li key={t}><span style={{ color: 'var(--brand)' }}>✓</span>{t}</li>
@@ -81,14 +85,20 @@ export default function Support() {
         </Card>
       </div>
 
-      <div className="section-title"><Icon name="help" /><h2>Common questions</h2></div>
+      <div className="section-title"><Icon name="help" /><h2>{t('Common questions')}</h2></div>
       <Card className="faq">
         {FAQ.map(([qq, a]) => (
           <details key={qq}><summary>{qq}</summary><p>{a}</p></details>
         ))}
       </Card>
 
-      <div className="section-title"><Icon name="phone" /><h2>Contact us</h2></div>
+      <div className="section-title" id="tickets"><Icon name="ticket" /><h2>{t('Support tickets')}</h2></div>
+      <RoutesExplainer />
+      {user?.role === 'customer' ? <MyTickets compact /> : (
+        <Card><p style={{ margin: 0 }}>{user ? 'Support tickets are raised by customers. Staff work on them in the Helpdesk.' : <><Link to="/login">Sign in</Link> to raise a support ticket and follow its replies.</>}</p></Card>
+      )}
+
+      <div className="section-title"><Icon name="phone" /><h2>{t('Contact us')}</h2></div>
       <div className="help-grid">
         <div className="help-card">
           <span className="ic"><Icon name="bell" /></span>
@@ -104,7 +114,8 @@ export default function Support() {
         <div className="help-card">
           <span className="ic"><Icon name="alert" /></span>
           <h3>Complaints and appeals</h3>
-          <p>Disagree with a decision? A formal grievance and appeal centre is planned for a later release. For now, reply to the information request on your claim with any new evidence.</p>
+          <p>Disagree with VHC's service? Raise a formal grievance. Disagree with an insurer's decision on cover or a claim? Complain to the insurer's grievance officer; if unresolved, use IRDAI's Bima Bharosa system or the Insurance Ombudsman.</p>
+          <Link className="go" to="/grievances">Grievances →</Link>
         </div>
       </div>
     </>

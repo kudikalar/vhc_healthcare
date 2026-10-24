@@ -3,24 +3,41 @@ import { db } from '../db.js';
 import { today } from '../clock.js';
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { sum } from '../utils/money.js';
-import { policyStatusAt } from '../services/lifecycle.js';
+import { APP_STATUS, policyStatusAt } from '../services/lifecycle.js';
 
 const r = Router();
-r.use(authenticate, requireRole('agent', 'underwriter', 'claims_officer', 'admin'));
+// Read-only oversight and finance roles may read the summary too (no mutations live here).
+r.use(authenticate, requireRole('agent', 'underwriter', 'claims_officer', 'admin', 'finance_manager', 'operations_admin', 'compliance_officer', 'auditor'));
 
 const countBy = (arr, f) => arr.reduce((m, x) => ({ ...m, [f(x)]: (m[f(x)] || 0) + 1 }), {});
 
-/** Confirms each successful payment/payout is reflected exactly once on its target record. */
+/**
+ * Confirms each successful payment/payout is reflected exactly once on its target record. Proposal
+ * payments are reconciled against the insurer's decision: a premium that is waiting for issuance
+ * ("Issuance Pending") or was refused ("Declined by Insurer", refunded) is tracked separately and is not
+ * a mismatch — it is reported in its own bucket so finance can follow it up.
+ */
 function reconcile() {
   const payments = db.find('payments', (p) => p.status === 'success');
   const policies = db.all('policies');
   const mismatches = [];
+  const awaitingIssuance = [];
+  const declinedByInsurer = [];
   let confirmed = 0;
   for (const p of payments) {
     let applied = 0;
     if (p.purpose === 'application') {
       const pol = policies.find((x) => x.firstPaymentRef === p.reference);
       applied = pol ? p.amount : 0;
+      if (!pol) {
+        const app = db.get('applications', p.applicationId);
+        if (app?.status === APP_STATUS.ISSUANCE_PENDING) { awaitingIssuance.push({ reference: p.reference, amount: p.amount, applicationNumber: app.applicationNumber }); continue; }
+        if (app?.status === APP_STATUS.INSURER_DECLINED) {
+          const refunded = sum(db.find('refunds', (r) => r.paymentId === p.id && r.status === 'completed'), (r) => r.amount);
+          declinedByInsurer.push({ reference: p.reference, amount: p.amount, applicationNumber: app.applicationNumber, refunded, refundStatus: p.refundStatus || 'pending' });
+          continue;
+        }
+      }
     } else {
       const pol = policies.find((x) => x.id === p.policyId);
       applied = sum((pol?.schedule || []).filter((i) => i.paymentRef === p.reference), (i) => i.amount);
@@ -33,6 +50,9 @@ function reconcile() {
     sum(db.all('lifeClaims'), (c) => sum(c.beneficiaries.filter((b) => b.paid), (b) => b.allocation));
   return {
     premiumsCollected: sum(payments, (p) => p.amount), premiumsApplied: confirmed, paymentMismatches: mismatches,
+    awaitingIssuance, awaitingIssuanceAmount: sum(awaitingIssuance, (x) => x.amount),
+    declinedByInsurer, declinedByInsurerAmount: sum(declinedByInsurer, (x) => x.amount),
+    declinedAwaitingRefund: declinedByInsurer.filter((x) => x.refunded < x.amount).length,
     payoutsCompleted: sum(payouts, (p) => p.amount), claimAmountsPaid: claimPaid,
     balanced: mismatches.length === 0 && sum(payouts, (p) => p.amount) === claimPaid,
   };

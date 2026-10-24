@@ -73,7 +73,8 @@ r.get('/', (req, res) => {
         Draft: [3, 'Continue your application', 'Saved as a draft'],
         'More Information Required': [1, 'Information requested', 'Underwriting needs more information'],
         Approved: [1, a.offer?.revised ? 'Review revised terms' : 'Review and accept your offer', `Offer valid until ${a.offer?.expiresAt}`],
-        'Offer Accepted': [1, 'Complete your payment', 'Pay the first premium to issue the policy'],
+        'Offer Accepted': [1, 'Complete your payment', 'Pay the first premium so the insurer can issue the policy'],
+        'Issuance Pending': [2, 'Waiting for the insurer', 'Payment received — the insurer is confirming issuance of your policy'],
       }[a.status];
       if (map) list.push({ kind: 'application', priority: map[0], title: map[1], detail: `${a.applicationNumber} · ${a.planName} — ${map[2]}`, link: `/applications/${a.id}`, product: a.product });
     }

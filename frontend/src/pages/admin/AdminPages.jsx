@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api.js';
+import { INTERNAL_STAFF, PARTNER_ROLES } from '../../auth.jsx';
 import { date, dateTime, ROLE_LABEL, titleCase } from '../../format.js';
 import { Alert, Badge, Card, DevHint, ErrorBox, Field, Loading, Modal, PageHeader, Table, useAction, useLoad } from '../../components/ui.jsx';
 import { Reconciliation } from '../staff/StaffOps.jsx';
@@ -110,29 +111,43 @@ export function HospitalAdmin() {
   );
 }
 
+const ORG_LABEL = { insurer: 'Insurer', hospital: 'Hospital', tpa: 'TPA', employer: 'Employer' };
+const PARTNER_ROLE_LIST = Object.keys(PARTNER_ROLES);
+
 export function UserAdmin() {
-  const res = useLoad(() => api.get('/admin/users'));
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', role: 'agent' });
+  const [filter, setFilter] = useState({ role: '', orgType: '', q: '' });
+  const qs = new URLSearchParams(Object.entries(filter).filter(([, v]) => v)).toString();
+  const res = useLoad(() => api.get(`/admin/users${qs ? `?${qs}` : ''}`), [qs]);
+  const orgs = useLoad(() => api.get('/enterprise/orgs').catch(() => ({})));
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', role: 'agent', orgId: '' });
   const [open, setOpen] = useState(false);
   const [invite, setInvite] = useState(null);
   const act = useAction();
   const run = (fn, msg) => act.run(async () => { await fn(); res.reload(); }, msg);
   const fe = act.error?.fields || {};
+  const formOrgType = PARTNER_ROLES[form.role];
+  const roleOptions = (u) => (PARTNER_ROLES[u.role] ? PARTNER_ROLE_LIST.filter((r) => PARTNER_ROLES[r] === PARTNER_ROLES[u.role]) : INTERNAL_STAFF);
   return (
     <>
-      <PageHeader title="Users & roles" subtitle="Staff join by invitation only; customers register themselves." actions={<button className="btn" onClick={() => { setOpen(true); setInvite(null); }}>Invite staff user</button>} />
+      <PageHeader title="Users & roles" subtitle="Staff and partner users join by invitation only; customers register themselves. Partner users always belong to exactly one organisation." actions={<button className="btn" onClick={() => { setOpen(true); setInvite(null); }}>Invite user</button>} />
       {act.message && <Alert kind="ok">{act.message}</Alert>}
       {invite && <DevHint>invitation emails are simulated. Invite link: <a href={`/accept-invite?token=${invite}`}>/accept-invite?token=…</a></DevHint>}
       <ErrorBox error={act.error} />
+      <form className="form-grid" style={{ marginBottom: '1rem' }} onSubmit={(e) => e.preventDefault()} aria-label="Filter users">
+        <Field label="Search"><input value={filter.q} onChange={(e) => setFilter({ ...filter, q: e.target.value })} placeholder="Name or email" /></Field>
+        <Field label="Role"><select value={filter.role} onChange={(e) => setFilter({ ...filter, role: e.target.value })}><option value="">All roles</option>{['customer', ...INTERNAL_STAFF, ...PARTNER_ROLE_LIST].map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></Field>
+        <Field label="Organisation type"><select value={filter.orgType} onChange={(e) => setFilter({ ...filter, orgType: e.target.value })}><option value="">Any</option>{Object.entries(ORG_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+      </form>
       <Card>
         {res.loading ? <Loading /> : (
-          <Table rows={res.data} columns={[
-            { key: 'name', label: 'Name', render: (u) => <>{u.name}{u.customerId && <div className="muted">{u.customerId}</div>}</> }, { key: 'email', label: 'Email' },
+          <Table rows={res.data} empty="No users match." columns={[
+            { key: 'name', label: 'Name', render: (u) => <>{u.name}{u.customerId && <div className="muted">{u.customerId}</div>}{u.qaFixture && <div><Badge kind="info">QA fixture</Badge></div>}</> }, { key: 'email', label: 'Email' },
             { key: 'role', label: 'Role', render: (u) => (u.role === 'customer' ? ROLE_LABEL.customer : (
-              <select value={u.role} onChange={(e) => run(() => api.patch(`/admin/users/${u.id}`, { role: e.target.value }), 'Role updated — the user must sign in again')} style={{ maxWidth: 180 }}>
-                {['agent', 'underwriter', 'claims_officer', 'admin'].map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+              <select aria-label={`Role for ${u.name}`} value={u.role} onChange={(e) => run(() => api.patch(`/admin/users/${u.id}`, { role: e.target.value }), 'Role updated — the user must sign in again')} style={{ maxWidth: 200 }}>
+                {roleOptions(u).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
               </select>
             )) },
+            { key: 'org', label: 'Organisation', render: (u) => (u.orgType ? <>{u.orgName || u.orgId}<div className="muted">{ORG_LABEL[u.orgType]}</div></> : <span className="muted">{u.role === 'customer' ? '—' : 'VHC (internal)'}</span>) },
             { key: 'status', label: 'Status', render: (u) => <Badge>{u.status}</Badge> },
             { key: 'verified', label: 'Contacts', render: (u) => <small>{u.emailVerified ? '✉ ✓' : '✉ –'} {u.mobileVerified ? '📱 ✓' : '📱 –'}</small> },
             { key: 'lastLoginAt', label: 'Last sign-in', render: (u) => (u.lastLoginAt ? dateTime(u.lastLoginAt) : '—') },
@@ -140,15 +155,28 @@ export function UserAdmin() {
           ]} />
         )}
       </Card>
-      <Modal open={open} title="Invite a staff user" onClose={() => setOpen(false)}>
+      <Modal open={open} title="Invite a user" onClose={() => setOpen(false)}>
         <div className="form-grid">
           <Field label="First name" error={fe.firstName}><input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></Field>
           <Field label="Last name" error={fe.lastName}><input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></Field>
           <Field label="Work email" error={fe.email} className="full"><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
-          <Field label="Role" error={fe.role}><select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>{['agent', 'underwriter', 'claims_officer', 'admin'].map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></Field>
+          <Field label="Role" error={fe.role}>
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value, orgId: '' })}>
+              <optgroup label="VHC staff">{INTERNAL_STAFF.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</optgroup>
+              <optgroup label="Partner organisations">{PARTNER_ROLE_LIST.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</optgroup>
+            </select>
+          </Field>
+          {formOrgType && (
+            <Field label={`${ORG_LABEL[formOrgType]} organisation`} error={fe.orgId}>
+              <select value={form.orgId} onChange={(e) => setForm({ ...form, orgId: e.target.value })}>
+                <option value="">Select…</option>
+                {(orgs.data?.[formOrgType] || []).map((o) => <option key={o.id} value={o.id}>{o.name}{o.sandbox ? ' (sandbox)' : ''}{o.status && o.status !== 'Active' ? ` — ${o.status}` : ''}</option>)}
+              </select>
+            </Field>
+          )}
         </div>
-        <p className="muted" style={{ fontSize: '.85rem' }}>The invitee receives a 72-hour link to set their own password. Staff sessions never stay signed in beyond 12 hours.</p>
-        <div className="row end"><button className="btn" onClick={() => run(async () => { const r = await api.post('/admin/users', form); setInvite(r.devInviteToken); setOpen(false); }, 'Invitation sent')}>Send invitation</button></div>
+        <p className="muted" style={{ fontSize: '.85rem' }}>The invitee receives a 72-hour link to set their own password. Partner users can only see their own organisation's records. Staff sessions never stay signed in beyond 12 hours.</p>
+        <div className="row end"><button className="btn" disabled={act.busy} onClick={() => run(async () => { const body = { ...form }; if (!formOrgType) delete body.orgId; const r = await api.post('/admin/users', body); setInvite(r.devInviteToken); setOpen(false); }, 'Invitation sent')}>Send invitation</button></div>
       </Modal>
     </>
   );
@@ -197,7 +225,7 @@ export function ReportsAudit() {
       <Card title="Audit log" actions={<small className="muted">Approvals, rejections, financial actions and sensitive document access</small>}>
         <form className="form-grid" onSubmit={(e) => { e.preventDefault(); setQ(filters); }}>
           <Field label="Action contains"><input value={filters.action} onChange={(e) => setFilters({ ...filters, action: e.target.value })} placeholder="e.g. APPROV, PAYMENT, DOCUMENT" /></Field>
-          <Field label="Entity type"><select value={filters.entityType} onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}><option value="">All</option>{['application', 'policy', 'payment', 'payout', 'healthClaim', 'lifeClaim', 'user', 'plan', 'hospital', 'exception'].map((t) => <option key={t}>{t}</option>)}</select></Field>
+          <Field label="Entity type"><select value={filters.entityType} onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}><option value="">All</option>{['application', 'policy', 'payment', 'payout', 'refund', 'insurerSettlement', 'paymentLink', 'healthClaim', 'lifeClaim', 'supportTicket', 'dataRequest', 'user', 'plan', 'hospital', 'exception'].map((t) => <option key={t}>{t}</option>)}</select></Field>
           <Field label="Actor"><input value={filters.actor} onChange={(e) => setFilters({ ...filters, actor: e.target.value })} /></Field>
           <div className="row" style={{ alignItems: 'flex-end' }}><button className="btn">Filter</button></div>
         </form>

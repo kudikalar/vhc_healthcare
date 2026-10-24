@@ -1,20 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, idempotencyKey } from '../../api.js';
 import { date, money, titleCase, toPaise } from '../../format.js';
 import { Alert, Badge, Card, ErrorBox, Field, KV, Loading, PageHeader, Table, Timeline, useAction, useLoad } from '../../components/ui.jsx';
 import DocumentPanel from '../../components/DocumentPanel.jsx';
 import { BucketFilterNote } from './CustomerPages.jsx';
+import { DocumentChecklist, InsurerComms, ResponsibilityCard, SettlementBreakdown, SlaChip, SlaTimer, TimelineSummary, UnifiedBadge } from '../claimsops/components.jsx';
 
 export function ClaimsList() {
   const [params] = useSearchParams();
   const bucket = params.get('bucket') || '';
   const res = useLoad(() => api.get(`/health-claims${bucket ? `?bucket=${bucket}` : ''}`), [bucket]);
+  const intimations = useLoad(() => api.get('/claims-ops/intimations?status=Intimated'));
   const nav = useNavigate();
   return (
     <>
-      <PageHeader title="Health claims" actions={<Link className="btn" to="/claims/new">New claim</Link>} />
+      <PageHeader title="Health claims" subtitle="Track every claim with its current status, who it is with and what happens next." actions={<><Link className="btn secondary" to="/claims/intimate">Intimate a claim</Link><Link className="btn" to="/claims/new">New claim</Link></>} />
       <BucketFilterNote bucket={bucket} path="/claims" />
+      {intimations.data?.length > 0 && (
+        <Card title="Intimations waiting to become a claim">
+          <Table rows={intimations.data} onRowClick={(i) => nav(`/claims/intimations/${i.id}`)} columns={[
+            { key: 'intimationNumber', label: 'Intimation' }, { key: 'memberName', label: 'Patient' }, { key: 'hospitalName', label: 'Hospital' },
+            { key: 'expectedAdmissionDate', label: 'Expected admission', render: (i) => date(i.expectedAdmissionDate) },
+            { key: 'go', label: '', render: (i) => <Link className="btn sm" to={`/claims/new?intimation=${i.id}`} onClick={(e) => e.stopPropagation()}>File claim</Link> },
+          ]} />
+        </Card>
+      )}
       <Card>
         {res.loading ? <Loading /> : (
           <Table rows={res.data} empty="No claims yet." onRowClick={(c) => nav(`/claims/${c.id}`)} columns={[
@@ -23,7 +34,8 @@ export function ClaimsList() {
             { key: 'admissionDate', label: 'Admitted', render: (c) => date(c.admissionDate) },
             { key: 'requestedAmount', label: 'Requested', num: true, render: (c) => money(c.requestedAmount) },
             { key: 'approvedAmount', label: 'Approved', num: true, render: (c) => money(c.approvedAmount) },
-            { key: 'status', label: 'Status', render: (c) => <Badge>{c.status}</Badge> },
+            { key: 'status', label: 'Status', render: (c) => <><UnifiedBadge status={c.unifiedStatus || c.status} />{c.responsible && <div className="muted" style={{ fontSize: '.78rem' }}>With: {c.responsible}</div>}</> },
+            { key: 'sla', label: 'Timer', render: (c) => (c.sla && ['preauth', 'final_auth'].includes(c.sla.key) ? <SlaChip sla={c.sla} compact /> : <span className="muted">—</span>) },
           ]} />
         )}
       </Card>
@@ -40,6 +52,13 @@ export function NewClaim() {
   });
   const [key] = useState(idempotencyKey); // stable across retries: no duplicate claims on network failure
   const [f, setF] = useState({ policyId: params.get('policy') || '', memberId: '', type: params.get('type') === 'cashless' ? 'cashless' : 'reimbursement', hospitalId: '', hospitalName: '', admissionDate: '', dischargeDate: '', diagnosis: '', treatment: '', requestedAmount: '', isAccident: false, payoutDetails: { accountName: '', accountNumber: '', ifsc: '' } });
+  const intimationId = params.get('intimation');
+  const intimation = useLoad(() => (intimationId ? api.get(`/claims-ops/intimations/${intimationId}`) : Promise.resolve(null)), [intimationId]);
+  useEffect(() => {
+    const i = intimation.data;
+    if (!i || i.status !== 'Intimated') return;
+    setF((x) => ({ ...x, policyId: i.policyId, memberId: i.memberId, type: i.preferredType, hospitalId: i.hospitalId || '', hospitalName: i.hospitalId ? '' : i.hospitalName, admissionDate: i.expectedAdmissionDate }));
+  }, [intimation.data]);
   const act = useAction();
   const policy = useMemo(() => data.data?.policies.find((p) => p.id === f.policyId), [data.data, f.policyId]);
   const hospital = data.data?.hospitals.find((h) => h.id === f.hospitalId);
@@ -51,13 +70,17 @@ export function NewClaim() {
   const submit = () => act.run(async () => {
     const amount = toPaise(f.requestedAmount);
     if (!amount) throw new Error('Enter the claimed amount in rupees');
-    const c = await api.post('/health-claims', { ...f, requestedAmount: amount, payoutDetails: f.type === 'reimbursement' ? f.payoutDetails : undefined, idempotencyKey: key });
+    const c = await api.post('/health-claims', { ...f, requestedAmount: amount, payoutDetails: f.type === 'reimbursement' ? f.payoutDetails : undefined, idempotencyKey: key, intimationId: intimation.data?.status === 'Intimated' ? intimation.data.id : undefined });
     nav(`/claims/${c.id}`);
   });
 
   return (
     <>
       <PageHeader title="New health claim" subtitle="Cashless: pre-authorisation at a network hospital. Reimbursement: submit bills after treatment." />
+      {intimation.data && (intimation.data.status === 'Intimated'
+        ? <Alert kind="info">Filing the claim for intimation {intimation.data.intimationNumber}. Policy, patient, hospital and admission date are pre-filled.</Alert>
+        : <Alert kind="warn">Intimation {intimation.data.intimationNumber} is {intimation.data.status.toLowerCase()}; this will be filed as a new claim.</Alert>)}
+      {!intimationId && <Alert kind="info">Not admitted yet, or only need to inform the insurer? <Link to="/claims/intimate">Intimate the claim first</Link> — you can add bills and details later.</Alert>}
       <Card>
         <div className="form-grid">
           <Field label="Policy">
@@ -136,21 +159,39 @@ export function AssessmentTable({ a }) {
 
 export function ClaimDetail() {
   const { id } = useParams();
-  const res = useLoad(() => api.get(`/health-claims/${id}`), [id]);
+  const res = useLoad(async () => ({ claim: await api.get(`/health-claims/${id}`), loadedAt: Date.now() }), [id]);
   const act = useAction();
   const [note, setNote] = useState('');
   const [finalAmount, setFinalAmount] = useState('');
+  const [preset, setPreset] = useState(null);
   if (res.loading && !res.data) return <Loading />;
   if (res.error) return <ErrorBox error={res.error} />;
-  const c = res.data;
-  const run = (fn) => act.run(async () => res.setData(await fn()));
+  const { claim: c, loadedAt } = res.data;
+  const ops = c.ops;
+  const run = (fn) => act.run(async () => res.setData({ claim: await fn(), loadedAt: Date.now() }));
+  const refresh = () => res.reload();
+  const liveClock = ops?.sla.clocks.find((k) => ['preauth', 'final_auth'].includes(k.key) && k.running);
+  const settleClock = ops?.sla.clocks.find((k) => k.key === 'settlement');
+  const closed = ['Settled', 'Rejected'].includes(c.status) || ops?.unified.status === 'Closed';
   return (
     <>
-      <PageHeader title={`Claim ${c.claimNumber}`} subtitle={`${titleCase(c.type)} · ${c.policy.policyNumber} · ${c.member?.fullName}`} actions={<Badge>{c.status}</Badge>} />
+      <PageHeader
+        title={`Claim ${c.claimNumber}`}
+        subtitle={`${titleCase(c.type)} · ${c.policy.policyNumber} · ${c.member?.fullName}${ops?.insurer.claimRef ? ` · Insurer ref ${ops.insurer.claimRef}` : ''}`}
+        actions={<><UnifiedBadge status={ops?.unified.status || c.status} /><Link className="btn secondary sm" to={`/grievances?new=1&claim=${c.id}`}>Raise a grievance</Link></>}
+      />
       <ErrorBox error={act.error} />
+      {ops && <Card><ResponsibilityCard ops={ops} /></Card>}
+      {liveClock && (
+        <Card title={liveClock.key === 'preauth' ? 'Cashless pre-authorisation timer' : 'Final authorisation timer'}>
+          <SlaTimer clock={liveClock} loadedAt={loadedAt} />
+          <p className="co-disclaimer">Regulatory turnaround target tracked by VHC (SLA policy v{liveClock.policyVersion}). The decision itself is made by {ops.tpa ? `${ops.tpa.name} for the insurer` : 'the insurer'}.</p>
+        </Card>
+      )}
       {c.status === 'Documents Requested' && (
         <Card title="Documents requested">
           <ul>{c.documentRequests.filter((d) => !d.resolved).map((d, i) => <li key={i}>{d.note}</li>)}</ul>
+          <p className="muted">Upload them below, then let the claims team know. The settlement timer is paused until then.</p>
           <Field label="Note to the claims team (optional)"><input value={note} onChange={(e) => setNote(e.target.value)} /></Field>
           <button className="btn" style={{ marginTop: '.5rem' }} disabled={act.busy} onClick={() => run(() => api.post(`/health-claims/${c.id}/respond`, { note }))}>I have uploaded the documents</button>
         </Card>
@@ -159,27 +200,44 @@ export function ClaimDetail() {
         <Card title="Pre-authorisation approved (provisional)">
           <Alert kind="info">Provisional amount {money(c.preauth.amount)}. The final amount is decided after the final bill is reviewed.</Alert>
           <div className="row">
-            <input style={{ maxWidth: 200 }} placeholder="Final bill (₹)" value={finalAmount} onChange={(e) => setFinalAmount(e.target.value)} />
+            <label className="field" style={{ margin: 0 }}>Final bill (₹)<input style={{ maxWidth: 200 }} inputMode="decimal" value={finalAmount} onChange={(e) => setFinalAmount(e.target.value)} /></label>
             <button className="btn" disabled={act.busy} onClick={() => run(() => api.post(`/health-claims/${c.id}/final-bill`, { finalAmount: toPaise(finalAmount) }))}>Submit final bill</button>
           </div>
         </Card>
       )}
       {c.status === 'Preauth Rejected' && <Alert kind="warn">Cashless request refused: {c.preauth?.reason}. You can still <Link to={`/claims/new?policy=${c.policyId}`}>file a reimbursement claim</Link> after treatment.</Alert>}
-      {c.rejection && <Alert kind="error">Rejected: {c.rejection.reason}</Alert>}
+      {c.rejection && <Alert kind="error">Rejected: {c.rejection.reason}. If you disagree, you can <Link to={`/grievances?new=1&claim=${c.id}`}>raise a grievance</Link> and complain to the insurer’s grievance officer.</Alert>}
+      {ops?.grievances?.length > 0 && <Alert kind="info">Grievance{ops.grievances.length > 1 ? 's' : ''} on this claim: {ops.grievances.map((g, i) => <span key={g.id}>{i ? ', ' : ''}<Link to={`/grievances/${g.id}`}>{g.reference}</Link> ({g.status})</span>)}</Alert>}
+
+      {ops && !closed && ops.pendingDocuments.length > 0 && (
+        <Card title={`Pending documents (${ops.pendingDocuments.length})`}>
+          <DocumentChecklist intel={ops.documents} onPick={(categories) => setPreset({ categories, n: Date.now() })} />
+        </Card>
+      )}
+
       <div className="grid grid-2">
         <Card title="Claim details">
           <KV items={[
             ['Hospital', `${c.hospitalName}${c.networkHospital ? ' (network)' : ''}`], ['Admission – discharge', `${date(c.admissionDate)} – ${date(c.dischargeDate)}`],
             ['Diagnosis', c.diagnosis], ['Treatment', c.treatment], ['Requested', money(c.requestedAmount)],
             c.preauth?.amount && ['Pre-authorised (provisional)', money(c.preauth.amount)], ['Paid', money(c.paidAmount)],
+            ops?.insurer.name && ['Insurer', ops.insurer.name], ops?.tpa && ['TPA', ops.tpa.name],
+            settleClock?.startAt && ['Settlement target', settleClock.stopAt ? `Completed (${settleClock.state === 'met' ? 'within' : 'outside'} target)` : <SlaChip key="s" sla={settleClock} compact />],
           ]} />
         </Card>
-        <Card title="Settlement calculation">
-          {c.assessment ? <AssessmentTable a={c.assessment} /> : <div className="empty">Not yet assessed.</div>}
+        <Card title="Settlement breakdown">
+          {ops ? <SettlementBreakdown s={ops.settlement} /> : c.assessment ? <AssessmentTable a={c.assessment} /> : <div className="empty">Not yet assessed.</div>}
+          {c.assessment && <details style={{ marginTop: '.6rem' }}><summary>How the amount was calculated</summary><AssessmentTable a={c.assessment} /></details>}
         </Card>
       </div>
-      <DocumentPanel entityType="healthClaim" entityId={c.id} canUpload={!['Settled', 'Rejected'].includes(c.status)} categories={['bill', 'prescription', 'medical_report', 'discharge_summary', 'bank_proof', 'other']} />
-      <Card title="Timeline"><Timeline items={c.timeline} /></Card>
+      <DocumentPanel entityType="healthClaim" entityId={c.id} canUpload={!closed} preset={preset} onUploaded={refresh}
+        hints={Object.fromEntries((ops?.documents.quality || []).map((q) => [q.documentId, q.issues]))}
+        categories={['bill', 'discharge_summary', 'prescription', 'medical_report', 'exam_report', 'identity', 'bank_proof', 'other']} />
+      <div className="grid grid-2">
+        <Card title="Insurer communications"><InsurerComms items={ops?.insurerComms} /></Card>
+        <Card title="Timeline"><Timeline items={c.timeline} /></Card>
+      </div>
+      {ops && <TimelineSummary summary={ops.timelineSummary} />}
     </>
   );
 }

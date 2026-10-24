@@ -59,5 +59,15 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthCtx);
-export const isStaff = (u) => ['agent', 'underwriter', 'claims_officer', 'admin'].includes(u?.role);
-export const homeFor = (u) => (!u ? '/' : u.role === 'customer' ? '/dashboard' : u.role === 'claimant' ? '/life-claim' : '/ops');
+export const INTERNAL_STAFF = ['agent', 'underwriter', 'claims_officer', 'admin', 'operations_admin', 'sales_manager', 'finance_manager', 'support_manager', 'support_agent', 'compliance_officer', 'auditor'];
+export const PARTNER_ROLES = { insurer_admin: 'insurer', insurer_user: 'insurer', hospital_admin: 'hospital', hospital_staff: 'hospital', tpa_admin: 'tpa', tpa_agent: 'tpa', corporate_admin: 'employer', corporate_hr: 'employer' };
+export const isStaff = (u) => INTERNAL_STAFF.includes(u?.role);
+export const isPartner = (u) => !!PARTNER_ROLES[u?.role];
+const HOME = {
+  customer: '/dashboard', claimant: '/life-claim',
+  insurer_admin: '/insurer', insurer_user: '/insurer', hospital_admin: '/hospital', hospital_staff: '/hospital',
+  tpa_admin: '/tpa', tpa_agent: '/tpa', corporate_admin: '/corporate', corporate_hr: '/corporate',
+  finance_manager: '/finance', support_manager: '/helpdesk', support_agent: '/helpdesk',
+  compliance_officer: '/command', auditor: '/command', operations_admin: '/command', sales_manager: '/command',
+};
+export const homeFor = (u) => (!u ? '/' : HOME[u.role] || '/ops');

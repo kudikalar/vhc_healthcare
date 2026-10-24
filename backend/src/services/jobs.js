@@ -1,4 +1,5 @@
 // Scheduled jobs (run on demand from dev tools / after clock changes, and hourly in the server).
+import { retryPendingEvents } from './events.js';
 import { db, meta, tx } from '../db.js';
 import { today } from '../clock.js';
 import { addDays, diffDays } from '../utils/dates.js';
@@ -6,9 +7,14 @@ import { notify } from './audit.js';
 import { policyStatusAt } from './lifecycle.js';
 import { initiatePayment, processPaymentCallback } from './payments.js';
 
+/** Modules register extra scheduled work here (e.g. SLA breach checks); each returns counters to merge. */
+export const JOB_HOOKS = [];
+export const registerJob = (fn) => JOB_HOOKS.push(fn);
+
 export function runJobs() {
   return tx(() => {
     const t = today();
+    const eventRetries = retryPendingEvents().retried;
     const out = { renewalReminders: 0, dueReminders: 0, graceNotices: 0, lapseNotices: 0, autoPayAttempts: 0 };
     for (const p of db.all('policies')) {
       if (p.product === 'health') {
@@ -39,6 +45,8 @@ export function runJobs() {
         }
       }
     }
+    out.eventRetries = eventRetries;
+    for (const hook of JOB_HOOKS) Object.assign(out, hook() || {});
     return out;
   });
 }

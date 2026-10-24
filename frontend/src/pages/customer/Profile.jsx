@@ -5,6 +5,7 @@ import { useAuth } from '../../auth.jsx';
 import { dateTime } from '../../format.js';
 import { Alert, Badge, Card, DevHint, ErrorBox, Field, Loading, Modal, PageHeader, Tabs, useAction, useLoad } from '../../components/ui.jsx';
 import { OtpCard, PasswordField } from '../../components/AuthBits.jsx';
+import { PrivacyPanel } from '../enterprise/PaymentsExtras.jsx';
 
 const fieldsOf = (e) => (e instanceof ApiError ? e.fields : {});
 
@@ -25,10 +26,11 @@ export default function Profile() {
       <PageHeader title="Your profile" subtitle={p.customerId ? `Customer ID ${p.customerId}` : undefined} />
       <div className="profile-layout">
         <div>
-          <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[{ value: 'personal', label: 'Personal' }, { value: 'address', label: 'Address' }, { value: 'security', label: 'Security & contact' }]} />
+          <Tabs value={tab} onChange={(t) => setParams({ tab: t })} tabs={[{ value: 'personal', label: 'Personal' }, { value: 'address', label: 'Address' }, { value: 'security', label: 'Security & contact' }, ...(p.role === 'customer' ? [{ value: 'privacy', label: 'Privacy & data' }] : [])]} />
           {tab === 'personal' && <Personal p={p} onSaved={update} />}
           {tab === 'address' && <Address p={p} onSaved={update} />}
           {tab === 'security' && <Security p={p} onSaved={update} reload={res.reload} />}
+          {tab === 'privacy' && p.role === 'customer' && <PrivacyPanel />}
         </div>
         {p.checklist && (
           <aside>

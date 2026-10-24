@@ -11,6 +11,9 @@ export const APP_STATUS = {
   DRAFT: 'Draft', SUBMITTED: 'Submitted', INITIAL_REVIEW: 'Initial Review', UNDERWRITING: 'Underwriting',
   MIR: 'More Information Required', APPROVED: 'Approved', REJECTED: 'Rejected', POSTPONED: 'Postponed',
   ACCEPTED: 'Offer Accepted', DECLINED: 'Offer Declined', ISSUED: 'Issued',
+  // Payment confirmation and policy issuance are separate events: after payment the proposal waits for
+  // the insurer's issuance decision (see services/insurerHub.js).
+  ISSUANCE_PENDING: 'Issuance Pending', INSURER_DECLINED: 'Declined by Insurer',
 };
 export const EDITABLE = [APP_STATUS.DRAFT, APP_STATUS.MIR];
 
@@ -100,7 +103,7 @@ export function policyView(policy, { includeSchedule = true } = {}) {
 
 // ---------- issuance ----------
 export function issuePolicy(app, payment, actor) {
-  if (app.status !== APP_STATUS.ACCEPTED) throw new AppError(409, 'Offer has not been accepted');
+  if (![APP_STATUS.ACCEPTED, APP_STATUS.ISSUANCE_PENDING].includes(app.status)) throw new AppError(409, 'Offer has not been accepted');
   const plan = db.get('plans', app.planId);
   const version = planVersion(plan, app.offer.planVersion ?? app.planVersion);
   const cfg = structuredClone(version.config);
@@ -115,6 +118,8 @@ export function issuePolicy(app, payment, actor) {
     termsSnapshot: cfg, // frozen copy: later plan edits never change this policy
     startDate: start, issuedAt: now().toISOString(), firstPaymentRef: payment?.reference || null,
     offer: structuredClone(app.offer),
+    insurerId: plan.insurerId || null, insurerName: plan.insurerName || null, productUin: plan.uin || null,
+    sandbox: plan.sandbox !== false,
   };
   let policy;
   if (app.product === 'health') {
