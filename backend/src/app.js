@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import swaggerUi from 'swagger-ui-express';
 import { openapiSpec } from './openapi.js';
 import { load } from './db.js';
 import { now } from './clock.js';
@@ -33,6 +32,36 @@ import './services/insurerHub.js'; // registers integration event handlers
 import { runStartupMigrations } from './services/seed.js';
 import { storeStatus } from './services/remoteStore.js';
 
+// Swagger UI is loaded from a CDN (pinned version) and reads the spec from /api/openapi.json. This
+// keeps the docs page working on serverless hosts such as Vercel, where swagger-ui-express's bundled
+// static assets are not traced into the function and would otherwise 404.
+const SWAGGER_UI_VERSION = '5.17.14';
+const SWAGGER_UI_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vision Health Care API docs</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/${SWAGGER_UI_VERSION}/swagger-ui.min.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/${SWAGGER_UI_VERSION}/swagger-ui-bundle.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/${SWAGGER_UI_VERSION}/swagger-ui-standalone-preset.min.js" crossorigin></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: '/api/openapi.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: 'StandaloneLayout',
+      });
+    };
+  </script>
+</body>
+</html>`;
+
 export function createApp() {
   load();
   runStartupMigrations();
@@ -47,9 +76,9 @@ export function createApp() {
 
   app.get('/api/health', (req, res) => res.json({ ok: true, name: 'Vision Health Care API', time: now().toISOString(), store: storeStatus }));
 
-  // API documentation: raw OpenAPI spec and interactive Swagger UI.
+  // API documentation: raw OpenAPI spec and interactive Swagger UI (served from a CDN, see above).
   app.get('/api/openapi.json', (req, res) => res.json(openapiSpec));
-  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, { customSiteTitle: 'Vision Health Care API docs' }));
+  app.get(['/api/docs', '/api/docs/'], (_req, res) => res.type('html').send(SWAGGER_UI_HTML));
 
   app.use('/api/auth', authRoutes);
   app.use('/api/profile', profileRoutes);

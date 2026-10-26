@@ -21,7 +21,6 @@
     "express": "^5.1.0",
     "ioredis": "^5.11.1",
     "multer": "^2.0.2",
-    "pdfkit": "^0.17.1",
-    "swagger-ui-express": "^5.0.1"
+    "pdfkit": "^0.17.1"
   }
 }
