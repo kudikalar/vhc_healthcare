@@ -1,6 +1,10 @@
 // Vercel serverless entry: runs the backend Express app in the same project so the browser keeps one
 // origin (the session/CSRF cookies are SameSite=Strict).
 //
+// This file lives at the repository root so the Vercel Root Directory can be the repo root: the
+// backend it imports (`../backend/...`) then sits INSIDE the root, which Vercel bundles reliably.
+// (A `.mjs` extension forces ES-module parsing, since there is no root package.json declaring it.)
+//
 // Storage: Vercel's filesystem is per-instance and temporary. When an Upstash Redis store is connected
 // (KV_REST_API_URL + KV_REST_API_TOKEN, or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN), each
 // request runs under a short store lock: load the latest data → handle → save if changed → unlock.
@@ -13,11 +17,11 @@ process.env.STORAGE_DIR ??= '/tmp/vhc-storage';
 // Development mode exposes the simulated email/OTP codes the demo flows rely on (see README).
 process.env.NODE_ENV = process.env.VHC_NODE_ENV || 'development';
 
-const { createApp } = await import('../../backend/src/app.js');
-const { db, withDeterministicRandom } = await import('../../backend/src/db.js');
-const { resetAndSeed, runStartupMigrations } = await import('../../backend/src/services/seed.js');
-const { runJobs } = await import('../../backend/src/services/jobs.js');
-const { acquireLock, invalidateLocal, noteStoreError, releaseLock, remoteEnabled, syncIn, syncOut } = await import('../../backend/src/services/remoteStore.js');
+const { createApp } = await import('../backend/src/app.js');
+const { db, withDeterministicRandom } = await import('../backend/src/db.js');
+const { resetAndSeed, runStartupMigrations } = await import('../backend/src/services/seed.js');
+const { runJobs } = await import('../backend/src/services/jobs.js');
+const { acquireLock, invalidateLocal, noteStoreError, releaseLock, remoteEnabled, syncIn, syncOut } = await import('../backend/src/services/remoteStore.js');
 
 // Without a shared store, every instance has its own memory. Two things keep sign-in working anyway:
 // signed session cookies any instance can verify, and identical demo data on every instance (seeded
