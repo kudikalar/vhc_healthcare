@@ -3,7 +3,7 @@
   "framework": null,
   "installCommand": "if [ -d frontend ]; then cd frontend; fi && npm ci && cd ../backend && npm ci --omit=dev",
   "buildCommand": "if [ -d frontend ]; then cd frontend; fi && npm run build",
-  "outputDirectory": "frontend/dist",
+  "outputDirectory": "dist",
   "functions": {
     "api/index.mjs": { "maxDuration": 30 }
   },
