@@ -1,2 +1,7 @@
 node_modules
-dist
+
+# The app now lives entirely under frontend/. These stale top-level copies may linger
+# locally (a file lock prevented removing them) but are no longer tracked.
+/backend/
+/api/
+/dist/

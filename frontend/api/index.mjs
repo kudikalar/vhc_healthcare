@@ -1,9 +1,9 @@
 // Vercel serverless entry: runs the backend Express app in the same project so the browser keeps one
 // origin (the session/CSRF cookies are SameSite=Strict).
 //
-// This file lives at the repository root so the Vercel Root Directory can be the repo root: the
-// backend it imports (`../backend/...`) then sits INSIDE the root, which Vercel bundles reliably.
-// (A `.mjs` extension forces ES-module parsing, since there is no root package.json declaring it.)
+// This file lives under the Vercel Root Directory (frontend/) as frontend/api, so the backend it
+// imports (`../backend/...` -> frontend/backend) sits INSIDE the root and Vercel bundles it reliably.
+// (The .mjs extension keeps ES-module parsing unambiguous.)
 //
 // Storage: Vercel's filesystem is per-instance and temporary. When an Upstash Redis store is connected
 // (KV_REST_API_URL + KV_REST_API_TOKEN, or UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN), each
